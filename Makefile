@@ -1,9 +1,9 @@
 .DEFAULT_GOAL := build
 
-DATA_DIR:=/home/tobias/Data/transformer
+DATA_DIR:=/Users/tobnor/Data
 
-GPU_TAG := nightly-gpu-py3
-CPU_TAG := nightly-py3
+GPU_TAG := 2.0.0b0-gpu-py3
+CPU_TAG := 2.0.0b0-py3
 
 
 # --- BUILD -----------------------
@@ -22,9 +22,9 @@ build: build-cpu build-gpu
 
 .PHONY: run-cpu
 run-cpu:
-	docker run --rm -it -v $(CURDIR):/opt/project -v $(DATA_DIR):/data tobias/transformer-cpu bash
+	docker run --rm -it -v $(CURDIR):/opt/project -v $(DATA_DIR):/data -v /tmp:/tmp tobias/transformer-cpu bash
 
 .PHONY: run-gpu
 run-gpu:
-	docker run --rm -it --runtime nvidia -v $(CURDIR):/opt/project -v $(DATA_DIR):/data tobias/transformer-gpu bash
+	docker run --rm -it --runtime nvidia -v $(CURDIR):/opt/project -v $(DATA_DIR):/data -v /tmp:/tmp tobias/transformer-gpu bash
 
