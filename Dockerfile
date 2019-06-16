@@ -2,7 +2,8 @@ ARG TAG
 FROM tensorflow/tensorflow:$TAG
 RUN echo $TAG
 
-WORKDIR /root
+RUN mkdir -p /opt/project/src
+WORKDIR /opt/project/src
 
 RUN apt update && apt install -y jq wget
 
