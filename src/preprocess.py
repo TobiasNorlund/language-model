@@ -22,7 +22,7 @@ def get_vocab(output_dir: Path):
 def create_vocab(input_file: Path, target_vocab_size: int):
     with input_file.open("r") as input:
         return tfds.features.text.SubwordTextEncoder.build_from_corpus(
-            corpus_generator=input,
+            corpus_generator=(line.strip() for line in input),
             target_vocab_size=target_vocab_size
         )
 
@@ -34,7 +34,7 @@ def get_or_create_vocab(input_file: Path, output_dir: Path, target_vocab_size):
     except VocabularyNotFoundException:
         logging.info("Started building vocabulary")
         vocab = create_vocab(input_file, target_vocab_size)
-        logging.info("Saving vocabulary")
+        logging.info("Saving vocabulary of size {}".format(vocab.vocab_size))
         vocab.save_to_file(str(output_dir / VOCAB_FILE_PREFIX))
     return vocab
 
