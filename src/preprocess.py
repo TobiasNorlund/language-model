@@ -1,9 +1,7 @@
 import tensorflow as tf
 import logging
 import os
-import sys
 import tensorflow_datasets as tfds
-from typing import TextIO
 from pathlib import Path
 
 

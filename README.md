@@ -2,8 +2,11 @@
 
 
 - [ ] Build a vanilla transformer model
-  - [ ] Text encoding
+  - [x] Text encoding
+  - [ ] Train loop
+  - [ ] Model code
   - [ ] TensorBoard
+  - [ ] Decoding
   - [ ] Validate performance
   - [ ] Visualize attentions
 - [ ] Play around with different decoding schemes
