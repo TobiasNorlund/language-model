@@ -3,8 +3,8 @@
 
 - [ ] Build a vanilla transformer model
   - [x] Text encoding
-  - [ ] Train loop
-  - [ ] Model code
+  - [x] Train loop
+  - [x] Model code
   - [ ] TensorBoard
   - [ ] Decoding
   - [ ] Validate performance

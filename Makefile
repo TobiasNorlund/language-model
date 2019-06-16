@@ -28,3 +28,6 @@ run-cpu:
 run-gpu:
 	docker run --rm -it --runtime nvidia -v $(CURDIR):/opt/project -v $(DATA_DIR):/data -v /tmp:/tmp tobias/transformer-gpu bash
 
+.PHONY: run-notebook
+run-notebook:
+	docker run --rm -it -v $(CURDIR):/opt/project -v $(DATA_DIR):/data -v /tmp:/tmp -p 8888:8888 -w /opt/project/notebooks tobias/transformer-cpu jupyter notebook --ip 0.0.0.0 --allow-root
