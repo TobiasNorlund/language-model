@@ -118,8 +118,10 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
                         step + 1, train_loss.result(), train_accuracy.result()))
 
             print("Epoch finished in {} secs".format(time.time() - epoch_start))
-            print("Saving checkpoint at '{}'".format(ckpt_save_path))
+
             ckpt_save_path = ckpt_manager.save()
+            print("Saving checkpoint at '{}'".format(ckpt_save_path))
+
 
     except KeyboardInterrupt:
         pass
