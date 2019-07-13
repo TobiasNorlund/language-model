@@ -31,3 +31,7 @@ run-gpu:
 .PHONY: run-notebook
 run-notebook:
 	docker run --rm -it -v $(CURDIR):/opt/project -v $(DATA_DIR):/data -v /tmp:/tmp -p 8888:8888 -w /opt/project/notebooks tobias/transformer-cpu jupyter notebook --ip 0.0.0.0 --allow-root
+
+.PHONY: tensorboard
+run-tensorboard:
+	docker run --rm -it -v $(CURDIR):/opt/project -v $(DATA_DIR):/data -v /tmp:/tmp -p 6006:6006 tobias/transformer-cpu bash

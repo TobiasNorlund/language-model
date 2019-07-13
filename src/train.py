@@ -12,7 +12,8 @@ HPARAMS = {
     "d_model": 128,
     "num_heads": 8,
     "dff": 512,
-    "dropout_rate": 0.1
+    "dropout_rate": 0.1,
+    "learning_rate": 0.01
 }
 
 
@@ -46,8 +47,8 @@ def create_masks(tar):
 
 
 def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: int, prefetch_buffer: int,
-          num_layers: int, d_model: int, num_heads: int, dff: int, dropout_rate: 0.1, checkpoint_path: Path):
-
+          num_layers: int, d_model: int, num_heads: int, dff: int, dropout_rate: 0.1, learning_rate: float,
+          checkpoint_path: Path):
     # Training data
     train_ds = get_dataset(train_data, batch_size, shuffle_buffer, prefetch_buffer)
     vocab_size = get_vocab(vocab_dir).vocab_size + 2  # TODO: Add abstraction for the two special tokens?
@@ -74,7 +75,6 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
     train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
 
     # Optimizer
-    learning_rate = CustomSchedule(d_model)
     optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
 
     # Checkpointing
@@ -83,6 +83,10 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
     if ckpt_manager.latest_checkpoint:
         ckpt.restore(ckpt_manager.latest_checkpoint)
         print('Latest checkpoint restored')
+
+    # Tensorboard events
+    train_log_dir = str(checkpoint_path / "events")
+    train_summary_writer = tf.summary.create_file_writer(train_log_dir)
 
     @tf.function
     def train_step(tar):
@@ -116,6 +120,9 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
                 if step % 10 == 0:
                     print('Step {} Loss {:.4f} Accuracy {:.4f}'.format(
                         step + 1, train_loss.result(), train_accuracy.result()))
+                    with train_summary_writer.as_default():
+                        tf.summary.scalar('loss', train_loss.result(), step=step)
+                        tf.summary.scalar('accuracy', train_accuracy.result(), step=step)
 
             print("Epoch finished in {} secs".format(time.time() - epoch_start))
 
@@ -145,6 +152,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_heads", default=HPARAMS["num_heads"], type=int)
     parser.add_argument("--dff", default=HPARAMS["dff"], type=int)
     parser.add_argument("--dropout_rate", default=HPARAMS["dropout_rate"], type=int)
+    parser.add_argument("--learning-rate", default=HPARAMS["learning_rate"], type=float)
 
     # Training params
     parser.add_argument("--checkpoint-path", type=Path, required=True)
@@ -153,4 +161,5 @@ if __name__ == "__main__":
     params = parser.parse_args()
 
     train(params.train_data, params.vocab_dir, params.batch_size, params.shuffle_buffer, params.prefetch_buffer,
-          params.num_layers, params.d_model, params.num_heads, params.dff, params.dropout_rate, params.checkpoint_path)
+          params.num_layers, params.d_model, params.num_heads, params.dff, params.dropout_rate, params.learning_rate,
+          params.checkpoint_path)
