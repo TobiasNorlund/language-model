@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := build
 
-DATA_DIR:=/Users/tobnor/Data
+DATA_DIR:=$(CURDIR)/data
 
 GPU_TAG := 2.0.0b0-gpu-py3
 CPU_TAG := 2.0.0b0-py3
