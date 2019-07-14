@@ -5,8 +5,6 @@ from preprocess import get_vocab
 from model.learning_rate_schedule import CustomSchedule
 from pathlib import Path
 
-# tf.enable_eager_execution()
-
 HPARAMS = {
     "num_layers": 1,
     "d_model": 128,
@@ -88,7 +86,6 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
     train_log_dir = str(checkpoint_path / "events")
     train_summary_writer = tf.summary.create_file_writer(train_log_dir)
 
-    @tf.function
     def train_step(tar):
         tar_inp = tar[:, :-1]
         tar_real = tar[:, 1:]
