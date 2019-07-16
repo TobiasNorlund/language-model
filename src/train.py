@@ -28,8 +28,8 @@ def get_dataset(dataset_path: Path, batch_size: int, shuffle_buffer: int, prefet
 
     ds = tf.data.TFRecordDataset(str(dataset_path))
     ds = ds.map(_parse_function)
-    ds = ds.shuffle(buffer_size=shuffle_buffer)
     ds = ds.padded_batch(batch_size, padded_shapes=(-1,))
+    ds = ds.shuffle(buffer_size=shuffle_buffer)
     ds = ds.prefetch(buffer_size=prefetch_buffer)
 
     return ds
