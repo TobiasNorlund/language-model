@@ -71,7 +71,6 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
         return tf.reduce_mean(loss_)
 
     # Metrics
-    train_loss = tf.keras.metrics.Mean(name='train_loss')
     train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
 
     # Optimizer
@@ -107,8 +106,8 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
         gradients = tape.gradient(loss, transformer_decoder.trainable_variables)
         optimizer.apply_gradients(zip(gradients, transformer_decoder.trainable_variables))
 
-        train_loss(loss)
         train_accuracy(tar_real, predictions)
+        return loss
 
     try:
         while True:
@@ -116,20 +115,19 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
             steps_start = time.time()
 
             # Reset metrics
-            train_loss.reset_states()
             train_accuracy.reset_states()
 
             for batch in train_ds:
                 global_step.assign_add(1)
-                train_step(batch)
+                loss = train_step(batch)
 
                 # Print intermediate metrics
                 if global_step.numpy() % 10 == 0:
                     print('Step: {} Loss: {:.4f} Accuracy: {:.4f} ({:.3f}s)'.format(
-                        global_step.numpy(), train_loss.result(), train_accuracy.result(), time.time() - steps_start))
+                        global_step.numpy(), loss, train_accuracy.result(), time.time() - steps_start))
                     steps_start = time.time()
                     with train_summary_writer.as_default():
-                        tf.summary.scalar('loss', train_loss.result(), step=global_step.numpy())
+                        tf.summary.scalar('loss', loss, step=global_step.numpy())
                         tf.summary.scalar('accuracy', train_accuracy.result(), step=global_step.numpy())
 
                 # Checkpoint every X step
