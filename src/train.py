@@ -74,7 +74,8 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
     train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
 
     # Optimizer
-    optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
+    learning_rate_schedule = CustomSchedule(d_model)
+    optimizer = tf.keras.optimizers.Adam(learning_rate_schedule, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
 
     # Global step and epoch counters
     global_step = tf.Variable(0, name="global_step")
@@ -128,6 +129,8 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
                     steps_start = time.time()
                     with train_summary_writer.as_default():
                         tf.summary.scalar('loss', loss, step=global_step.numpy())
+                        tf.summary.scalar('learning_rate', learning_rate_schedule(float(global_step.numpy())),
+                                          step=global_step.numpy())
                         tf.summary.scalar('accuracy', train_accuracy.result(), step=global_step.numpy())
 
                 # Checkpoint every X step
