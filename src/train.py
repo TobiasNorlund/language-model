@@ -105,10 +105,17 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
             loss = loss_function(tar_real, predictions)
 
         gradients = tape.gradient(loss, transformer_decoder.trainable_variables)
-        tf.summary.scalar("gradient_norm", tf.linalg.global_norm(gradients), step=global_step.numpy())
         optimizer.apply_gradients(zip(gradients, transformer_decoder.trainable_variables))
 
         train_accuracy(tar_real, predictions)
+
+        with train_summary_writer.as_default():
+            tf.summary.scalar('loss', loss, step=global_step.numpy())
+            tf.summary.scalar('learning_rate', learning_rate_schedule(float(global_step.numpy())),
+                              step=global_step.numpy())
+            tf.summary.scalar("gradient_norm", tf.linalg.global_norm(gradients), step=global_step.numpy())
+            tf.summary.scalar('accuracy', train_accuracy.result(), step=global_step.numpy())
+
         return loss
 
     try:
@@ -128,11 +135,6 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
                     print('Step: {} Loss: {:.4f} Accuracy: {:.4f} ({:.3f}s)'.format(
                         global_step.numpy(), loss, train_accuracy.result(), time.time() - steps_start))
                     steps_start = time.time()
-                    with train_summary_writer.as_default():
-                        tf.summary.scalar('loss', loss, step=global_step.numpy())
-                        tf.summary.scalar('learning_rate', learning_rate_schedule(float(global_step.numpy())),
-                                          step=global_step.numpy())
-                        tf.summary.scalar('accuracy', train_accuracy.result(), step=global_step.numpy())
 
                 # Checkpoint every X step
                 if global_step.numpy() % checkpoint_every == 0:
