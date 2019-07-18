@@ -105,6 +105,7 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
             loss = loss_function(tar_real, predictions)
 
         gradients = tape.gradient(loss, transformer_decoder.trainable_variables)
+        tf.summary.scalar("gradient_norm", tf.linalg.global_norm(gradients), step=global_step.numpy())
         optimizer.apply_gradients(zip(gradients, transformer_decoder.trainable_variables))
 
         train_accuracy(tar_real, predictions)
