@@ -12,7 +12,7 @@ HPARAMS = {
     "num_heads": 8,
     "dff": 512,
     "dropout_rate": 0.1,
-    "learning_rate": 0.01,
+    "learning_rate_constant": 1.0,
     "checkpoint_every": 1000
 }
 
@@ -47,7 +47,7 @@ def create_masks(tar):
 
 
 def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: int, prefetch_buffer: int,
-          num_layers: int, d_model: int, num_heads: int, dff: int, dropout_rate: 0.1, learning_rate: float,
+          num_layers: int, d_model: int, num_heads: int, dff: int, dropout_rate: 0.1, learning_rate_constant: float,
           checkpoint_path: Path, checkpoint_every: int):
     # Training data
     train_ds = get_dataset(train_data, batch_size, shuffle_buffer, prefetch_buffer)
@@ -74,7 +74,7 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
     train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
 
     # Optimizer
-    learning_rate_schedule = CustomSchedule(d_model)
+    learning_rate_schedule = CustomSchedule(d_model, constant=learning_rate_constant)
     optimizer = tf.keras.optimizers.Adam(learning_rate_schedule, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
 
     # Global step and epoch counters
@@ -171,12 +171,12 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, required=True)
     parser.add_argument("--checkpoint-path", type=Path, required=True)
     parser.add_argument("--dropout_rate", default=HPARAMS["dropout_rate"], type=int)
-    parser.add_argument("--learning-rate", default=HPARAMS["learning_rate"], type=float)
+    parser.add_argument("--learning-rate-constant", default=HPARAMS["learning_rate_constant"], type=float)
     parser.add_argument("--checkpoint-every", default=HPARAMS["checkpoint_every"], type=int)
     # TODO: Add params for learning rate schedule?
 
     params = parser.parse_args()
 
     train(params.train_data, params.vocab_dir, params.batch_size, params.shuffle_buffer, params.prefetch_buffer,
-          params.num_layers, params.d_model, params.num_heads, params.dff, params.dropout_rate, params.learning_rate,
-          params.checkpoint_path, params.checkpoint_every)
+          params.num_layers, params.d_model, params.num_heads, params.dff, params.dropout_rate,
+          params.learning_rate_constant, params.checkpoint_path, params.checkpoint_every)
