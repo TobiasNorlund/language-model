@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 import time
 from model import transformer
 from preprocess import get_vocab
@@ -78,8 +79,8 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
     optimizer = tf.keras.optimizers.Adam(learning_rate_schedule, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
 
     # Global step and epoch counters
-    global_step = tf.Variable(0, name="global_step")
-    epoch = tf.Variable(0, name="epoch")
+    global_step = tf.Variable(0, name="global_step", trainable=False)
+    epoch = tf.Variable(0, name="epoch", trainable=False)
 
     # Checkpointing
     ckpt = tf.train.Checkpoint(transformer_decoder=transformer_decoder, optimizer=optimizer,
@@ -114,7 +115,6 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
             tf.summary.scalar('learning_rate', learning_rate_schedule(float(global_step.numpy())),
                               step=global_step.numpy())
             tf.summary.scalar("gradient_norm", tf.linalg.global_norm(gradients), step=global_step.numpy())
-            tf.summary.scalar('accuracy', train_accuracy.result(), step=global_step.numpy())
 
         return loss
 
@@ -130,6 +130,10 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
                 global_step.assign_add(1)
                 loss = train_step(batch)
 
+                if global_step.numpy() == 1:
+                    print("Number of trainable parameters: {}".format(
+                        np.sum([np.prod(v.get_shape().as_list()) for v in transformer_decoder.trainable_variables])))
+
                 # Print intermediate metrics
                 if global_step.numpy() % 10 == 0:
                     print('Step: {} Loss: {:.4f} Accuracy: {:.4f} ({:.3f}s)'.format(
@@ -140,6 +144,9 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
                 if global_step.numpy() % checkpoint_every == 0:
                     ckpt_save_path = ckpt_manager.save(checkpoint_number=global_step.numpy())
                     print("Saving checkpoint at '{}'".format(ckpt_save_path))
+
+            # Update train accuracy metric
+            tf.summary.scalar('accuracy', train_accuracy.result(), step=global_step.numpy())
 
             print("Epoch {} finished in {} secs".format(epoch.numpy(), time.time() - epoch_start))
             epoch.assign_add(1)
