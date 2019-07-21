@@ -294,15 +294,13 @@ class TransformerOnlyDecoder(tf.keras.Model):
 
     def __init__(self, num_layers, d_model, num_heads, dff, target_vocab_size, rate=0.1):
         super(TransformerOnlyDecoder, self).__init__()
-
         self.decoder = Decoder(num_layers, d_model, num_heads, dff, target_vocab_size, rate)
-
-        self.final_layer = tf.keras.layers.Dense(target_vocab_size)
 
     def call(self, tar, training, look_ahead_mask):
         # dec_output.shape == (batch_size, tar_seq_len, d_model)
         dec_output, attention_weights = self.decoder(tar, None, training, look_ahead_mask, None)
 
-        final_output = self.final_layer(dec_output)  # (batch_size, tar_seq_len, target_vocab_size)
+        # Final projection to vocabulary
+        final_output = tf.matmul(dec_output, self.decoder.embedding.embeddings, transpose_b=True)
 
         return final_output, attention_weights
