@@ -146,7 +146,8 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
                     print("Saving checkpoint at '{}'".format(ckpt_save_path))
 
             # Update train accuracy metric
-            tf.summary.scalar('accuracy', train_accuracy.result(), step=global_step.numpy())
+            with train_summary_writer.as_default():
+                tf.summary.scalar('accuracy', train_accuracy.result(), step=global_step.numpy())
 
             print("Epoch {} finished in {} secs".format(epoch.numpy(), time.time() - epoch_start))
             epoch.assign_add(1)
