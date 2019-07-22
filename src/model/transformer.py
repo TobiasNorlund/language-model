@@ -77,8 +77,8 @@ def scaled_dot_product_attention(q, k, v, mask):
 
 def point_wise_feed_forward_network(d_model, dff):
     return tf.keras.Sequential([
-        tf.keras.layers.Dense(dff, activation='relu'),  # (batch_size, seq_len, dff)
-        tf.keras.layers.Dense(d_model)  # (batch_size, seq_len, d_model)
+        tf.keras.layers.Dense(dff, activation='relu', kernel_initializer="lecun_uniform"),  # (batch_size, seq_len, dff)
+        tf.keras.layers.Dense(d_model, kernel_initializer="lecun_uniform")  # (batch_size, seq_len, d_model)
     ])
 
 
@@ -92,11 +92,11 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         self.depth = d_model // self.num_heads
 
-        self.wq = tf.keras.layers.Dense(d_model)
-        self.wk = tf.keras.layers.Dense(d_model)
-        self.wv = tf.keras.layers.Dense(d_model)
+        self.wq = tf.keras.layers.Dense(d_model, kernel_initializer="lecun_uniform")
+        self.wk = tf.keras.layers.Dense(d_model, kernel_initializer="lecun_uniform")
+        self.wv = tf.keras.layers.Dense(d_model, kernel_initializer="lecun_uniform")
 
-        self.dense = tf.keras.layers.Dense(d_model)
+        self.dense = tf.keras.layers.Dense(d_model, kernel_initializer="lecun_uniform")
 
     def split_heads(self, x, batch_size):
         """Split the last dimension into (num_heads, depth).
@@ -276,7 +276,7 @@ class Transformer(tf.keras.Model):
         self.decoder = Decoder(num_layers, d_model, num_heads, dff,
                                target_vocab_size, rate)
 
-        self.final_layer = tf.keras.layers.Dense(target_vocab_size)
+        self.final_layer = tf.keras.layers.Dense(target_vocab_size, kernel_initializer="lecun_uniform")
 
     def call(self, inp, tar, training, enc_padding_mask, look_ahead_mask, dec_padding_mask):
         enc_output = self.encoder(inp, training, enc_padding_mask)  # (batch_size, inp_seq_len, d_model)
