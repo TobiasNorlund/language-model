@@ -3,7 +3,7 @@ import numpy as np
 
 
 def get_angles(pos, i, d_model):
-    angle_rates = 1 / np.power(10000, (2 * (i//2)) / np.float32(d_model))
+    angle_rates = 1 / np.power(10000, (2 * (i // 2)) / np.float32(d_model))
     return pos * angle_rates
 
 
@@ -205,7 +205,7 @@ class Encoder(tf.keras.layers.Layer):
         self.d_model = d_model
         self.num_layers = num_layers
 
-        self.embedding = tf.keras.layers.Embedding(input_vocab_size, d_model)
+        self.embedding = tf.keras.layers.Embedding(input_vocab_size, d_model, embeddings_initializer="lecun_uniform")
         self.pos_encoding = positional_encoding(input_vocab_size, self.d_model)
 
         self.enc_layers = [EncoderLayer(d_model, num_heads, dff, rate)
@@ -237,7 +237,7 @@ class Decoder(tf.keras.layers.Layer):
         self.d_model = d_model
         self.num_layers = num_layers
 
-        self.embedding = tf.keras.layers.Embedding(target_vocab_size, d_model)
+        self.embedding = tf.keras.layers.Embedding(target_vocab_size, d_model, embeddings_initializer="lecun_uniform")
         self.pos_encoding = positional_encoding(target_vocab_size, self.d_model)
 
         self.dec_layers = [DecoderLayer(d_model, num_heads, dff, rate)
