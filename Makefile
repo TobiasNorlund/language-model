@@ -35,3 +35,4 @@ run-notebook:
 .PHONY: tensorboard
 run-tensorboard:
 	docker run --rm -it -u $$(id -u):$$(id -g) -v $(CURDIR):/opt/project -v /tmp:/tmp -p 6006:6006 $(DOCKER_IMAGE_BASE_NAME)-cpu bash
+
