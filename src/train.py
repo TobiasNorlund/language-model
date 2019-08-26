@@ -84,7 +84,7 @@ def train(train_data: Path, vocab_dir: Path, batch_size: int, shuffle_buffer: in
         ckpt.restore(ckpt_manager.latest_checkpoint)
         print('Latest checkpoint restored')
 
-    @tf.function
+    #@tf.function
     def train_step(tar):
         tar_inp = tar[:, :-1]
         tar_real = tar[:, 1:]

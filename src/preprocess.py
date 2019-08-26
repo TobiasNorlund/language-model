@@ -12,10 +12,10 @@ class VocabularyNotFoundException(Exception):
     pass
 
 
-def get_vocab(output_dir: Path):
-    if len(list(output_dir.glob("vocab*"))) > 0:
-        return tfds.features.text.SubwordTextEncoder.load_from_file(str(output_dir / VOCAB_FILE_PREFIX))
-    else:
+def get_vocab(vocab_path: Path):
+    try:
+        return tfds.features.text.SubwordTextEncoder.load_from_file(str(vocab_path).replace(".subwords", ""))
+    except Exception:
         raise VocabularyNotFoundException()
 
 
