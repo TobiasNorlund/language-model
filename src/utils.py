@@ -1,5 +1,6 @@
 from absl import flags
 
+
 class HParamSet:
     """
     Wraps the absl flags to static object attributes of this class

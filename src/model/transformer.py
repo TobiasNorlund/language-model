@@ -244,7 +244,7 @@ class Decoder(tf.keras.layers.Layer):
         self.num_layers = num_layers
 
         self.embedding = tf.keras.layers.Embedding(target_vocab_size, d_model)
-        self.pos_encoding = positional_encoding(target_vocab_size, self.d_model)
+        self.pos_encoding = positional_encoding(10000, self.d_model)  # TODO: Max length
 
         self.dec_layers = [DecoderLayer(d_model, num_heads, dff, rate)
                            for _ in range(num_layers)]
@@ -300,13 +300,14 @@ class Transformer(tf.keras.Model):
 class TransformerOnlyDecoder(tf.keras.Model):
 
     def __init__(self,
-                 target_vocab_size,
+                 target_vocab_size=None,
                  num_layers=hparams.num_layers,
                  d_model=hparams.d_model,
                  num_heads=hparams.num_heads,
                  dff=hparams.dff,
                  rate=hparams.dropout_rate):
         super(TransformerOnlyDecoder, self).__init__()
+        # Note: If target_vocab_size is None, a checkpoint needs to be restored to initialise embeddings
         self.decoder = Decoder(num_layers, d_model, num_heads, dff, target_vocab_size, rate)
 
     def call(self, tar, training, look_ahead_mask):
