@@ -1,18 +1,3 @@
-# Directed Transformer
-
-
-- [ ] Build a vanilla transformer model
-  - [x] Text encoding
-  - [x] Train loop
-  - [x] Model code
-  - [ ] TensorBoard
-  - [ ] Decoding
-  - [ ] Validate performance
-  - [ ] Visualize attentions
-- [ ] Play around with different decoding schemes
-- [ ] Directed Transformer
-
-...
 
 ## Preprocess
 
