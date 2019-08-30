@@ -4,18 +4,15 @@ from absl import app, flags
 from model import transformer
 from preprocess import get_vocab
 
-flags.DEFINE_string("vocab", None, help="Vocab path")
-flags.DEFINE_string("checkpoint_path", None, help="Model checkpoint path")
-flags.DEFINE_enum("strategy", "random", ["random"], help="Decoding strategy")
+
 flags.DEFINE_float("temperature", 1.0, help="Sampling temperature")
 flags.DEFINE_integer("max_len", 100, help="Max length of generated text (in tokens)")
-flags.mark_flags_as_required(["checkpoint_path"])
 
 FLAGS = flags.FLAGS
 
 
 def decode_random_sampling(seed_encoded, model, end_token_idx, temperature=1.0, max_len=100):
-
+    seed_encoded = list(seed_encoded)
     temp = tf.convert_to_tensor(temperature)
 
     def _decode_step(seed):
@@ -25,10 +22,9 @@ def decode_random_sampling(seed_encoded, model, end_token_idx, temperature=1.0, 
 
     for i in range(max_len):
         new_token = _decode_step(tf.convert_to_tensor(seed_encoded)[tf.newaxis, :])
+        seed_encoded.append(new_token)
         if new_token == end_token_idx:
             break
-        else:
-            seed_encoded.append(new_token)
 
     return seed_encoded
 
@@ -91,4 +87,9 @@ def main(argv):
 
 
 if __name__ == "__main__":
+    flags.DEFINE_string("vocab", None, help="Vocab path")
+    flags.DEFINE_string("checkpoint_path", None, help="Model checkpoint path")
+    flags.DEFINE_enum("strategy", "random", ["random"], help="Decoding strategy")
+    flags.mark_flags_as_required(["checkpoint_path"])
+
     app.run(main)

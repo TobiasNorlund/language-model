@@ -95,7 +95,7 @@ def preprocess(input_file: Path, output_dir: Path, output_name, target_vocab_siz
             if i > 0 and i % 10000 == 0:
                 logging.info("Processed {} lines from input file, {} encoded examples so far...".format(
                     i, len(encoded_examples)))
-            encoded = encode(text)
+            encoded = encode(text.strip())
             if len(encoded) < min_length or len(encoded) > max_length:
                 continue
             encoded_examples.append(encoded)
