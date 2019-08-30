@@ -134,9 +134,6 @@ def main(argv):
             print("Epoch {} finished in {} secs".format(epoch.numpy(), time.time() - epoch_start))
             epoch.assign_add(1)
 
-            #ckpt_save_path = ckpt_manager.save(checkpoint_number=global_step.numpy())
-            #print("Saving checkpoint at '{}'".format(ckpt_save_path))
-
     except KeyboardInterrupt:
         pass
 
