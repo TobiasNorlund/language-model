@@ -66,14 +66,11 @@ def main(argv):
     # Loss
     loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction='none')
 
-    # Metrics
-    train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
-
     # Optimizer
     optimizer = tf.optimizers.SGD(hparams.learning_rate)
 
     # Global step and epoch counters
-    global_step = tf.Variable(0, name="global_step", trainable=False)
+    global_step = tf.Variable(0, name="global_step", trainable=False, dtype=tf.int64)
     epoch = tf.Variable(0, name="epoch", trainable=False)
 
     # Checkpointing
@@ -95,16 +92,16 @@ def main(argv):
 
         mask = transformer.create_masks(tar_inp)
 
-        with tf.GradientTape() as tape:
-            predictions, _ = transformer_decoder(tar_inp, True, mask)
-            loss = calculate_loss(loss_object, tar_real, predictions)
-
-        gradients = tape.gradient(loss, transformer_decoder.trainable_variables)
-        optimizer.apply_gradients(zip(gradients, transformer_decoder.trainable_variables))
-
-        train_accuracy(tar_real, predictions)
-
         with train_summary_writer.as_default():
+            tf.summary.experimental.set_step(global_step)
+
+            with tf.GradientTape() as tape:
+                predictions, _ = transformer_decoder(tar_inp, True, mask)
+                loss = calculate_loss(loss_object, tar_real, predictions)
+
+            gradients = tape.gradient(loss, transformer_decoder.trainable_variables)
+            optimizer.apply_gradients(zip(gradients, transformer_decoder.trainable_variables))
+
             tf.summary.scalar('loss', loss, step=global_step.numpy())
             tf.summary.scalar("gradient_norm", tf.linalg.global_norm(gradients), step=global_step.numpy())
 
@@ -114,9 +111,6 @@ def main(argv):
         while True:
             epoch_start = time.time()
             steps_start = time.time()
-
-            # Reset metrics
-            train_accuracy.reset_states()
 
             for batch in train_ds:
                 global_step.assign_add(1)
@@ -128,18 +122,14 @@ def main(argv):
 
                 # Print intermediate metrics
                 if global_step.numpy() % 10 == 0:
-                    print('Step: {} Loss: {:.4f} Accuracy: {:.4f} ({:.3f}s)'.format(
-                        global_step.numpy(), loss, train_accuracy.result(), time.time() - steps_start))
+                    print('Step: {} Loss: {:.4f} ({:.3f}s)'.format(
+                        global_step.numpy(), loss, time.time() - steps_start))
                     steps_start = time.time()
 
                 # Checkpoint every X step
                 if global_step.numpy() % hparams.checkpoint_every == 0:
                     ckpt_save_path = ckpt_manager.save(checkpoint_number=global_step.numpy())
                     print("Saving checkpoint at '{}'".format(ckpt_save_path))
-
-            # Update train accuracy metric
-            with train_summary_writer.as_default():
-                tf.summary.scalar('accuracy', train_accuracy.result(), step=global_step.numpy())
 
             print("Epoch {} finished in {} secs".format(epoch.numpy(), time.time() - epoch_start))
             epoch.assign_add(1)

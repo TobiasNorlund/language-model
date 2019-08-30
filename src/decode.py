@@ -67,7 +67,7 @@ def main(argv):
     transformer_decoder = transformer.TransformerOnlyDecoder()
 
     # Global step and epoch counters
-    global_step = tf.Variable(0, name="global_step", trainable=False)
+    global_step = tf.Variable(0, name="global_step", trainable=False, dtype=tf.int64)
     epoch = tf.Variable(0, name="epoch", trainable=False)
 
     # Restore from checkpoint

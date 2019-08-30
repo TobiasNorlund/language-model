@@ -197,8 +197,10 @@ class DecoderLayer(tf.keras.layers.Layer):
         # enc_output.shape == (batch_size, input_seq_len, d_model)
 
         attn1, attn_weights_block1 = self.mha1(x, x, x, look_ahead_mask)  # (batch_size, target_seq_len, d_model)
+        tf.summary.histogram("mha1", attn1)
         attn1 = self.dropout1(attn1, training=training)
         out1 = self.layernorm1(attn1 + x)
+        tf.summary.histogram("mha1_normed", out1)
 
         if enc_output is not None:
             attn2, attn_weights_block2 = self.mha2(
@@ -212,6 +214,7 @@ class DecoderLayer(tf.keras.layers.Layer):
         ffn_output = self.ffn(out2)  # (batch_size, target_seq_len, d_model)
         ffn_output = self.dropout3(ffn_output, training=training)
         out3 = self.layernorm3(ffn_output + out2)  # (batch_size, target_seq_len, d_model)
+        tf.summary.histogram("out", out3)
 
         return out3, attn_weights_block1, attn_weights_block2
 
@@ -267,16 +270,19 @@ class Decoder(tf.keras.layers.Layer):
 
         x = self.embedding(x)  # (batch_size, target_seq_len, d_model)
         x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
+        tf.summary.histogram("scaled_embeddings", x)
         x += self.pos_encoding[:, :seq_len, :]
+        tf.summary.histogram("position_encodings", self.pos_encoding[:, :seq_len, :])
 
         x = self.dropout(x, training=training)
 
         for i in range(self.num_layers):
-            x, block1, block2 = self.dec_layers[i](x, enc_output, training,
-                                                   look_ahead_mask, padding_mask)
+            with tf.summary.experimental.summary_scope("layer_{}".format(i)):
+                x, block1, block2 = self.dec_layers[i](x, enc_output, training,
+                                                       look_ahead_mask, padding_mask)
 
-            attention_weights['decoder_layer{}_block1'.format(i + 1)] = block1
-            attention_weights['decoder_layer{}_block2'.format(i + 1)] = block2
+                attention_weights['decoder_layer{}_block1'.format(i + 1)] = block1
+                attention_weights['decoder_layer{}_block2'.format(i + 1)] = block2
 
         # x.shape == (batch_size, target_seq_len, d_model)
         return x, attention_weights
@@ -322,6 +328,7 @@ class TransformerOnlyDecoder(tf.keras.Model):
         self.decoder = Decoder(num_layers, d_model, num_heads, dff, target_vocab_size, rate)
 
     def call(self, tar, training, look_ahead_mask):
+
         # dec_output.shape == (batch_size, tar_seq_len, d_model)
         dec_output, attention_weights = self.decoder(tar, None, training, look_ahead_mask, None)
 
