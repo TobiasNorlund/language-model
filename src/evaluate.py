@@ -4,7 +4,7 @@ from absl import app, flags
 from model import transformer
 from preprocess import get_vocab, Vocabulary
 from pathlib import Path
-from decode import decode_encoded
+from decode import decode_encoded, RandomSamplingStrategy, TopKSamplingStrategy
 
 flags.DEFINE_boolean("wait_for_checkpoint", True, help="Whether to wait for next checkpoint when done")
 flags.DEFINE_string("data", None, help="Data tfrecord file")
@@ -30,11 +30,12 @@ def get_dataset(dataset_path: Path, batch_size: int):
     return ds
 
 
-def render_markdown(gt_example, random_sampled):
+def render_markdown(gt_example, random_sampled, top_5):
     return """
     Ground Truth: {}
     Random sampled: {}
-    """.format(gt_example, random_sampled)
+    Top-5: {}
+    """.format(gt_example, random_sampled, top_5)
 
 
 def evaluate(vocab_path: Path, checkpoint_path: Path, dataset_path: Path, batch_size: int):
@@ -78,11 +79,16 @@ def evaluate(vocab_path: Path, checkpoint_path: Path, dataset_path: Path, batch_
     # Decode some examples
     gt_examples = []
     random_sampling_examples = []
+    top_5_sampling_examples = []
     for example in get_dataset(str(dataset_path), batch_size=1).shuffle(1000, seed=42).take(5):
         # Use the first 4 tokens as seed
-        decoded = decode_encoded(example[0][:4].numpy(), transformer_decoder, vocab.end_idx, "random")
         gt_examples.append(vocab.decode(example[0].numpy()))
-        random_sampling_examples.append(vocab.decode(decoded))
+        random_sampling_examples.append(
+            vocab.decode(decode_encoded(example[0][:4].numpy(), transformer_decoder, vocab.end_idx,
+                                        RandomSamplingStrategy())))
+        top_5_sampling_examples.append(
+            vocab.decode(decode_encoded(example[0][:4].numpy(), transformer_decoder, vocab.end_idx,
+                                        TopKSamplingStrategy(5))))
 
     # Tensorboard events
     eval_log_dir = str(checkpoint_path / (dataset_path.stem + "_eval"))
@@ -93,9 +99,11 @@ def evaluate(vocab_path: Path, checkpoint_path: Path, dataset_path: Path, batch_
         tf.summary.scalar("log_perplexity", log_ppl.result(), global_step.numpy())
 
         # Write decoded examples..
-        for i, (gt_example, random_sampling_example) in enumerate(zip(gt_examples, random_sampling_examples)):
+        for i, (gt_example, rand_ex, top_5_ex) in enumerate(zip(gt_examples,
+                                                                random_sampling_examples,
+                                                                top_5_sampling_examples)):
             tf.summary.text("decoded_example_{}".format(i + 1),
-                            tf.convert_to_tensor(render_markdown(gt_example, random_sampling_example)),
+                            tf.convert_to_tensor(render_markdown(gt_example, rand_ex, top_5_ex)),
                             global_step.numpy())
 
 
