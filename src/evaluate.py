@@ -112,7 +112,7 @@ def evaluate(vocab_path: Path, checkpoint_path: Path, dataset_path: Path, batch_
                             tf.convert_to_tensor(render_markdown(gt_example, rand_ex, top_5_ex)),
                             global_step.numpy())
 
-    return {"token_accuracy": token_accuracy.result().numpy(), "log_perplexity": log_ppl.result().numpy()}
+    return {"token_accuracy": float(token_accuracy.result().numpy()), "log_perplexity": float(log_ppl.result().numpy())}
 
 
 def main(argv):
