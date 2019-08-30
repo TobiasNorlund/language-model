@@ -47,10 +47,7 @@ def calculate_loss(loss_obj, real, pred):
     mask = tf.math.logical_not(tf.math.equal(real, 0))
     loss_ = loss_obj(real, pred)
 
-    mask = tf.cast(mask, dtype=loss_.dtype)
-    loss_ *= mask
-
-    return tf.reduce_mean(loss_)
+    return tf.reduce_mean(tf.boolean_mask(loss_, mask))
 
 
 def main(argv):

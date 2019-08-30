@@ -79,8 +79,10 @@ def evaluate(vocab_path: Path, checkpoint_path: Path, dataset_path: Path, batch_
         logits, _ = transformer_decoder(batch_inp, False, mask)  # TODO: Visualise attentions
 
         # Update metrics
-        token_accuracy(batch_tar, logits)
-        log_ppl(tf.nn.sparse_softmax_cross_entropy_with_logits(batch_tar, logits) / tf.math.log(2.0))
+        padding_mask = tf.math.logical_not(tf.math.equal(batch_tar, 0))
+        token_accuracy(batch_tar, logits, sample_weight=padding_mask)
+        log_ppl(tf.nn.sparse_softmax_cross_entropy_with_logits(batch_tar, logits) / tf.math.log(2.0),
+                sample_weight=padding_mask)
 
     # Decode some examples
     gt_examples = []
