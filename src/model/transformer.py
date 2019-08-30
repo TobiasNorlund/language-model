@@ -46,6 +46,17 @@ def create_look_ahead_mask(size):
     return mask  # (seq_len, seq_len)
 
 
+def create_masks(tar):
+    # Used in the 1st attention block in the decoder.
+    # It is used to pad and mask future tokens in the input received by
+    # the decoder.
+    look_ahead_mask = create_look_ahead_mask(tf.shape(tar)[1])
+    dec_target_padding_mask = create_padding_mask(tar)
+    combined_mask = tf.maximum(dec_target_padding_mask, look_ahead_mask)
+
+    return combined_mask
+
+
 def scaled_dot_product_attention(q, k, v, mask):
     """Calculate the attention weights.
     q, k, v must have matching leading dimensions.
@@ -314,7 +325,7 @@ class TransformerOnlyDecoder(tf.keras.Model):
         # dec_output.shape == (batch_size, tar_seq_len, d_model)
         dec_output, attention_weights = self.decoder(tar, None, training, look_ahead_mask, None)
 
-        # Final projection to vocabulary
+        # Final projection to vocabulary => logits
         final_output = tf.matmul(dec_output, self.decoder.embedding.embeddings, transpose_b=True)
 
         return final_output, attention_weights

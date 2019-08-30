@@ -2,22 +2,71 @@ import tensorflow as tf
 from pathlib import Path
 from absl import app, flags
 from model import transformer
+from preprocess import get_vocab
 
+flags.DEFINE_string("vocab", None, help="Vocab path")
 flags.DEFINE_string("checkpoint_path", None, help="Model checkpoint path")
+flags.DEFINE_enum("strategy", "random", ["random"], help="Decoding strategy")
+flags.DEFINE_float("temperature", 1.0, help="Sampling temperature")
+flags.DEFINE_integer("max_len", 100, help="Max length of generated text (in tokens)")
+flags.mark_flags_as_required(["checkpoint_path"])
+
+FLAGS = flags.FLAGS
 
 
-def decode(seed_text, model, strategy):
+def decode_random_sampling(seed_encoded, model, end_token_idx, temperature=1.0, max_len=100):
+
+    temp = tf.convert_to_tensor(temperature)
+
+    def _decode_step(seed):
+        mask = transformer.create_look_ahead_mask(tf.shape(seed)[1])
+        logits, _ = model(seed, training=False, look_ahead_mask=mask)
+        return tf.random.categorical(logits[:,-1,:] / temp, num_samples=1)[0, 0].numpy()
+
+    for i in range(max_len):
+        new_token = _decode_step(tf.convert_to_tensor(seed_encoded)[tf.newaxis, :])
+        if new_token == end_token_idx:
+            break
+        else:
+            seed_encoded.append(new_token)
+
+    return seed_encoded
+
+
+def decode_encoded(seed_encoded, model, end_token_idx, strategy):
     """
-    Decodes text from model, starting from seed_text using the given decoding stretegy
-    :param seed_text:
+
+    :param seed_encoded:
     :param model:
     :param strategy:
     :return:
     """
-    pass
+    if strategy == "random":
+        return decode_random_sampling(seed_encoded, model, end_token_idx, temperature=FLAGS.temperature,
+                                      max_len=FLAGS.max_len)
+    else:
+        raise RuntimeError("Unsupported strategy '{}'".format(strategy))
+
+
+def decode(seed_text, vocab, model, strategy):
+    """
+    Decodes text from model, starting from seed_text using the given decoding stretegy
+    :param seed_text:
+    :param vocab:
+    :param model:
+    :param strategy:
+    :return: The decoded
+    """
+    return vocab.decode(decode_encoded(vocab.encode(seed_text, include_start_token=True),
+                                       model,
+                                       vocab.end_idx,
+                                       strategy))
 
 
 def main(argv):
+    # Vocab
+    vocab = get_vocab(str(Path(flags.FLAGS.vocab)))
+
     # Load model
     transformer_decoder = transformer.TransformerOnlyDecoder()
 
@@ -35,7 +84,10 @@ def main(argv):
     else:
         raise RuntimeError("Couldn't load from checkpoint")
 
-    # TODO: Request seed_text from stdin and run decode(...)
+    while True:
+        seed_text = input("Seed text:\n")
+        decoded = decode(seed_text, vocab, transformer_decoder, flags.FLAGS.strategy)
+        print(decoded)
 
 
 if __name__ == "__main__":

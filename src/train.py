@@ -42,17 +42,6 @@ def get_dataset(dataset_path: Path, batch_size: int, shuffle_buffer: int, prefet
     return ds
 
 
-def create_masks(tar):
-    # Used in the 1st attention block in the decoder.
-    # It is used to pad and mask future tokens in the input received by
-    # the decoder.
-    look_ahead_mask = transformer.create_look_ahead_mask(tf.shape(tar)[1])
-    dec_target_padding_mask = transformer.create_padding_mask(tar)
-    combined_mask = tf.maximum(dec_target_padding_mask, look_ahead_mask)
-
-    return combined_mask
-
-
 def calculate_loss(loss_obj, real, pred):
     # Masks padded tokens from loss_object
     mask = tf.math.logical_not(tf.math.equal(real, 0))
@@ -69,7 +58,7 @@ def main(argv):
                            hparams.batch_size,
                            hparams.shuffle_buffer,
                            hparams.prefetch_buffer)
-    vocab_size = get_vocab(Path(flags.FLAGS.vocab)).vocab_size + 2  # TODO: Add abstraction for the two special tokens?
+    vocab_size = get_vocab(Path(flags.FLAGS.vocab)).vocab_size
 
     # Model
     transformer_decoder = transformer.TransformerOnlyDecoder(vocab_size)
@@ -104,7 +93,7 @@ def main(argv):
         tar_inp = tar[:, :-1]
         tar_real = tar[:, 1:]
 
-        mask = create_masks(tar_inp)
+        mask = transformer.create_masks(tar_inp)
 
         with tf.GradientTape() as tape:
             predictions, _ = transformer_decoder(tar_inp, True, mask)
