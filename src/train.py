@@ -61,7 +61,12 @@ def main(argv):
     vocab_size = get_vocab(Path(flags.FLAGS.vocab)).vocab_size
 
     # Model
-    transformer_decoder = transformer.TransformerOnlyDecoder(vocab_size)
+    transformer_decoder = transformer.TransformerOnlyDecoder(vocab_size,
+                                                             transformer.hparams.num_layers,
+                                                             transformer.hparams.d_model,
+                                                             transformer.hparams.num_heads,
+                                                             transformer.hparams.dff,
+                                                             transformer.hparams.dropout_rate)
 
     # Loss
     loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction='none')

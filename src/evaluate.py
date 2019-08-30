@@ -1,8 +1,9 @@
 import tensorflow as tf
 import time
+import json
 from absl import app, flags
 from model import transformer
-from preprocess import get_vocab, Vocabulary
+from preprocess import get_vocab
 from pathlib import Path
 from decode import decode_encoded, RandomSamplingStrategy, TopKSamplingStrategy
 
@@ -43,7 +44,12 @@ def evaluate(vocab_path: Path, checkpoint_path: Path, dataset_path: Path, batch_
     vocab = get_vocab(str(vocab_path))
 
     # Load model
-    transformer_decoder = transformer.TransformerOnlyDecoder()
+    transformer_decoder = transformer.TransformerOnlyDecoder(vocab.vocab_size,
+                                                             transformer.hparams.num_layers,
+                                                             transformer.hparams.d_model,
+                                                             transformer.hparams.num_heads,
+                                                             transformer.hparams.dff,
+                                                             transformer.hparams.dropout_rate)
 
     # Global step and epoch counters
     global_step = tf.Variable(0, name="global_step", trainable=False, dtype=tf.int64)
@@ -106,6 +112,8 @@ def evaluate(vocab_path: Path, checkpoint_path: Path, dataset_path: Path, batch_
                             tf.convert_to_tensor(render_markdown(gt_example, rand_ex, top_5_ex)),
                             global_step.numpy())
 
+    return {"token_accuracy": token_accuracy.result(), "log_perplexity": log_ppl.result()}
+
 
 def main(argv):
     checkpoint_path = Path(flags.FLAGS.checkpoint_path)
@@ -114,9 +122,10 @@ def main(argv):
             latest_checkpoint = tf.train.latest_checkpoint(str(checkpoint_path))
             start_time = time.time()
             print("Starting evaluation of checkpoint '{}'".format(latest_checkpoint))
-            evaluate(Path(flags.FLAGS.vocab), checkpoint_path, Path(flags.FLAGS.data),
+            res = evaluate(Path(flags.FLAGS.vocab), checkpoint_path, Path(flags.FLAGS.data),
                      flags.FLAGS.batch_size)
             print("Evaluation of checkpoint '{}' finished in {}s".format(latest_checkpoint, time.time() - start_time))
+            print(json.dumps(res))
 
             if flags.FLAGS.wait_for_checkpoint:
                 while latest_checkpoint == tf.train.latest_checkpoint(str(checkpoint_path)):
