@@ -26,7 +26,7 @@ run-cpu:
 
 .PHONY: run-gpu
 run-gpu:
-	docker run --rm -it --runtime nvidia -v $(CURDIR):/opt/project -v /tmp:/tmp $(DOCKER_IMAGE_BASE_NAME)-gpu bash
+	docker run --rm -it -u $$(id -u):$$(id -g) --runtime nvidia -v $(CURDIR):/opt/project -v /tmp:/tmp $(DOCKER_IMAGE_BASE_NAME)-gpu bash
 
 .PHONY: run-notebook
 run-notebook:
