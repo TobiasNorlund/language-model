@@ -46,6 +46,17 @@ def create_look_ahead_mask(size):
     return mask  # (seq_len, seq_len)
 
 
+def create_masks(tar):
+    # Used in the 1st attention block in the decoder.
+    # It is used to pad and mask future tokens in the input received by
+    # the decoder.
+    look_ahead_mask = create_look_ahead_mask(tf.shape(tar)[1])
+    dec_target_padding_mask = create_padding_mask(tar)
+    combined_mask = tf.maximum(dec_target_padding_mask, look_ahead_mask)
+
+    return combined_mask
+
+
 def scaled_dot_product_attention(q, k, v, mask):
     """Calculate the attention weights.
     q, k, v must have matching leading dimensions.
@@ -244,7 +255,7 @@ class Decoder(tf.keras.layers.Layer):
         self.num_layers = num_layers
 
         self.embedding = tf.keras.layers.Embedding(target_vocab_size, d_model)
-        self.pos_encoding = positional_encoding(target_vocab_size, self.d_model)
+        self.pos_encoding = positional_encoding(10000, self.d_model)  # TODO: Max length
 
         self.dec_layers = [DecoderLayer(d_model, num_heads, dff, rate)
                            for _ in range(num_layers)]
@@ -300,20 +311,21 @@ class Transformer(tf.keras.Model):
 class TransformerOnlyDecoder(tf.keras.Model):
 
     def __init__(self,
-                 target_vocab_size,
+                 target_vocab_size=None,
                  num_layers=hparams.num_layers,
                  d_model=hparams.d_model,
                  num_heads=hparams.num_heads,
                  dff=hparams.dff,
                  rate=hparams.dropout_rate):
         super(TransformerOnlyDecoder, self).__init__()
+        # Note: If target_vocab_size is None, a checkpoint needs to be restored to initialise embeddings
         self.decoder = Decoder(num_layers, d_model, num_heads, dff, target_vocab_size, rate)
 
     def call(self, tar, training, look_ahead_mask):
         # dec_output.shape == (batch_size, tar_seq_len, d_model)
         dec_output, attention_weights = self.decoder(tar, None, training, look_ahead_mask, None)
 
-        # Final projection to vocabulary
+        # Final projection to vocabulary => logits
         final_output = tf.matmul(dec_output, self.decoder.embedding.embeddings, transpose_b=True)
 
         return final_output, attention_weights

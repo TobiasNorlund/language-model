@@ -5,20 +5,23 @@ from model import transformer
 from preprocess import get_vocab
 from pathlib import Path
 from utils import HParamSet
-from absl import app
+from absl import app, flags
 
-# Data params
+# Training data params
 hparams = HParamSet()
-hparams.add("train_data", None, t=str, required=True, help="Training data tfrecord file")
-hparams.add("vocab", None, t=str, required=True, help="Vocab file")
 hparams.add("shuffle_buffer", 100, help="Shuffle buffer")
 hparams.add("prefetch_buffer", 1, help="Prefetch buffer")
 
 # Training params
 hparams.add("batch_size", 1, help="Batch size")
 hparams.add("learning_rate", 0.01, help="Learning rate")
-hparams.add("checkpoint_path", None, t=str, required=True, help="Checkpoint path")
 hparams.add("checkpoint_every", 1000, help="Checkpoint every X step")
+
+# Flags
+flags.DEFINE_string("train_data", None, help="Training data tfrecord file")
+flags.DEFINE_string("vocab", None, help="Vocab file")
+flags.DEFINE_string("checkpoint_path", None, help="Checkpoint path")
+flags.mark_flags_as_required(["train_data", "vocab", "checkpoint_path"])
 
 
 def get_dataset(dataset_path: Path, batch_size: int, shuffle_buffer: int, prefetch_buffer: int):
@@ -39,17 +42,6 @@ def get_dataset(dataset_path: Path, batch_size: int, shuffle_buffer: int, prefet
     return ds
 
 
-def create_masks(tar):
-    # Used in the 1st attention block in the decoder.
-    # It is used to pad and mask future tokens in the input received by
-    # the decoder.
-    look_ahead_mask = transformer.create_look_ahead_mask(tf.shape(tar)[1])
-    dec_target_padding_mask = transformer.create_padding_mask(tar)
-    combined_mask = tf.maximum(dec_target_padding_mask, look_ahead_mask)
-
-    return combined_mask
-
-
 def calculate_loss(loss_obj, real, pred):
     # Masks padded tokens from loss_object
     mask = tf.math.logical_not(tf.math.equal(real, 0))
@@ -62,11 +54,11 @@ def calculate_loss(loss_obj, real, pred):
 
 
 def main(argv):
-    train_ds = get_dataset(Path(hparams.train_data),
+    train_ds = get_dataset(Path(flags.FLAGS.train_data),
                            hparams.batch_size,
                            hparams.shuffle_buffer,
                            hparams.prefetch_buffer)
-    vocab_size = get_vocab(Path(hparams.vocab)).vocab_size + 2  # TODO: Add abstraction for the two special tokens?
+    vocab_size = get_vocab(Path(flags.FLAGS.vocab)).vocab_size
 
     # Model
     transformer_decoder = transformer.TransformerOnlyDecoder(vocab_size)
@@ -85,7 +77,7 @@ def main(argv):
     epoch = tf.Variable(0, name="epoch", trainable=False)
 
     # Checkpointing
-    checkpoint_path = Path(hparams.checkpoint_path)
+    checkpoint_path = Path(flags.FLAGS.checkpoint_path)
     ckpt = tf.train.Checkpoint(transformer_decoder=transformer_decoder, optimizer=optimizer,
                                global_step=global_step, epoch=epoch)
     ckpt_manager = tf.train.CheckpointManager(ckpt, str(checkpoint_path), max_to_keep=5)
@@ -101,7 +93,7 @@ def main(argv):
         tar_inp = tar[:, :-1]
         tar_real = tar[:, 1:]
 
-        mask = create_masks(tar_inp)
+        mask = transformer.create_masks(tar_inp)
 
         with tf.GradientTape() as tape:
             predictions, _ = transformer_decoder(tar_inp, True, mask)

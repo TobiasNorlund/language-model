@@ -5,8 +5,46 @@ import math
 import tensorflow_datasets as tfds
 from pathlib import Path
 
-
 VOCAB_FILE_PREFIX = "vocab"
+
+
+class Vocabulary(tfds.features.text.SubwordTextEncoder):
+    """
+    Extends the SubwordTextEncoder with two additional special tokens:
+     - <START>
+     - <END>
+    """
+    START = "<START>"
+    END = "<END>"
+
+    @property
+    def start_idx(self):
+        return self._token_to_ids(self.START)[0] + 1  # Add one for padding
+
+    @property
+    def end_idx(self):
+        return self._token_to_ids(self.END)[0] + 1  # Add one for padding
+
+    @classmethod
+    def build_from_corpus(cls,
+                          corpus_generator,
+                          target_vocab_size,
+                          max_subword_length=20,
+                          max_corpus_chars=None,
+                          reserved_tokens=None):
+        reserved_tokens = [cls.START, cls.END] if reserved_tokens is None else reserved_tokens + [cls.START, cls.END]
+        return super(Vocabulary, cls).build_from_corpus(corpus_generator, target_vocab_size, max_subword_length,
+                                                        max_corpus_chars, reserved_tokens)
+
+    def encode(self, s, include_start_token=False, include_end_token=False):
+        encoded = super(Vocabulary, self).encode(s)
+        if include_start_token:
+            encoded = [self.start_idx] + encoded
+        if include_end_token:
+            encoded = encoded + [self.end_idx]
+        return encoded
+
+    # TODO: Optionally remove start/end tokens in decode()
 
 
 class VocabularyNotFoundException(Exception):
@@ -15,14 +53,14 @@ class VocabularyNotFoundException(Exception):
 
 def get_vocab(vocab_path: Path):
     try:
-        return tfds.features.text.SubwordTextEncoder.load_from_file(str(vocab_path).replace(".subwords", ""))
+        return Vocabulary.load_from_file(str(vocab_path).replace(".subwords", ""))
     except Exception:
         raise VocabularyNotFoundException()
 
 
 def create_vocab(input_file: Path, target_vocab_size: int):
     with input_file.open("r") as input:
-        return tfds.features.text.SubwordTextEncoder.build_from_corpus(
+        return Vocabulary.build_from_corpus(
             corpus_generator=(line.strip() for line in input),
             target_vocab_size=target_vocab_size
         )
@@ -30,7 +68,7 @@ def create_vocab(input_file: Path, target_vocab_size: int):
 
 def get_or_create_vocab(input_file: Path, output_dir: Path, target_vocab_size):
     try:
-        vocab = get_vocab(output_dir)
+        vocab = get_vocab(output_dir / VOCAB_FILE_PREFIX)
         logging.info("Loaded existing vocabulary")
     except VocabularyNotFoundException:
         logging.info("Started building vocabulary")
@@ -48,7 +86,7 @@ def preprocess(input_file: Path, output_dir: Path, output_name, target_vocab_siz
     vocab = get_or_create_vocab(input_file, output_dir, target_vocab_size)
 
     def encode(text):
-        return [vocab.vocab_size] + vocab.encode(text) + [vocab.vocab_size + 1]
+        return vocab.encode(text, include_start_token=True, include_end_token=True)
 
     encoded_examples = []
     logging.info("Opening input file")
@@ -57,7 +95,7 @@ def preprocess(input_file: Path, output_dir: Path, output_name, target_vocab_siz
             if i > 0 and i % 10000 == 0:
                 logging.info("Processed {} lines from input file, {} encoded examples so far...".format(
                     i, len(encoded_examples)))
-            encoded = encode(text)
+            encoded = encode(text.strip())
             if len(encoded) < min_length or len(encoded) > max_length:
                 continue
             encoded_examples.append(encoded)
@@ -97,7 +135,7 @@ if __name__ == "__main__":
     parser.add_argument("--input", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--output-name", required=True)
-    parser.add_argument("--target-vocab-size", type=int, default=2**15)
+    parser.add_argument("--target-vocab-size", type=int, default=2 ** 15)
     parser.add_argument("--min-length", type=int, default=0)
     parser.add_argument("--max-length", type=int, default=math.inf)
     parser.add_argument("--max-examples", type=int, default=math.inf)
