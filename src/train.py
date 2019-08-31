@@ -21,6 +21,7 @@ hparams.add("checkpoint_every", 1000, help="Checkpoint every X step")
 flags.DEFINE_string("train_data", None, help="Training data tfrecord file")
 flags.DEFINE_string("vocab", None, help="Vocab file")
 flags.DEFINE_string("checkpoint_path", None, help="Checkpoint path")
+flags.DEFINE_integer("summarise_every", 1, help="Summarise model stats every X step")
 flags.mark_flags_as_required(["train_data", "vocab", "checkpoint_path"])
 
 
@@ -98,7 +99,8 @@ def main(argv):
             tf.summary.experimental.set_step(global_step)
 
             with tf.GradientTape() as tape:
-                predictions, _ = transformer_decoder(tar_inp, True, mask)
+                with tf.summary.record_if(global_step.numpy() % flags.FLAGS.summarise_every == 0):
+                    predictions, _ = transformer_decoder(tar_inp, True, mask)
                 loss = calculate_loss(loss_object, tar_real, predictions)
 
             gradients = tape.gradient(loss, transformer_decoder.trainable_variables)
@@ -123,7 +125,7 @@ def main(argv):
                         np.sum([np.prod(v.get_shape().as_list()) for v in transformer_decoder.trainable_variables])))
 
                 # Print intermediate metrics
-                if global_step.numpy() % 10 == 0:
+                if global_step.numpy() % 100 == 0:
                     print('Step: {} Loss: {:.4f} ({:.3f}s)'.format(
                         global_step.numpy(), loss, time.time() - steps_start))
                     steps_start = time.time()
