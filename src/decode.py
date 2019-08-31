@@ -111,7 +111,7 @@ def main(argv):
     ckpt_manager = tf.train.CheckpointManager(ckpt, str(checkpoint_path), max_to_keep=5)
     if ckpt_manager.latest_checkpoint:
         ckpt.restore(ckpt_manager.latest_checkpoint)
-        print('Latest checkpoint restored')
+        print("Restored checkpoint from: {}".format(ckpt_manager.latest_checkpoint))
     else:
         raise RuntimeError("Couldn't load from checkpoint")
 
