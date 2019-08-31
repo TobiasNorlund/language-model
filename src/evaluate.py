@@ -12,10 +12,12 @@ flags.DEFINE_string("data", None, help="Data tfrecord file")
 flags.DEFINE_string("vocab", None, help="Vocab path")
 flags.DEFINE_string("checkpoint_path", None, help="Model checkpoint path")
 flags.DEFINE_integer("batch_size", 1, help="Batch size")
+flags.DEFINE_integer("take", None, help="Take X examples")
+flags.DEFINE_integer("shuffle_buffer", 1000, help="Shuffle buffer. Only used when 'take' is set")
 flags.mark_flags_as_required(["data", "vocab", "checkpoint_path"])
 
 
-def get_dataset(dataset_path: Path, batch_size: int):
+def get_dataset(dataset_path: Path, batch_size: int, take: int=None, shuffle_buffer: int=1000):
     feature_description = {
         'text': tf.io.VarLenFeature(tf.int64)
     }
@@ -27,6 +29,9 @@ def get_dataset(dataset_path: Path, batch_size: int):
     ds = tf.data.TFRecordDataset(str(dataset_path))
     ds = ds.map(_parse_function)
     ds = ds.padded_batch(batch_size, padded_shapes=(-1,))
+    if take is not None:
+        ds = ds.shuffle(shuffle_buffer, seed=42)
+        ds = ds.take(take)
 
     return ds
 
@@ -39,7 +44,8 @@ def render_markdown(gt_example, random_sampled, top_5):
     """.format(gt_example, random_sampled, top_5)
 
 
-def evaluate(vocab_path: Path, checkpoint_path: Path, dataset_path: Path, batch_size: int):
+def evaluate(vocab_path: Path, checkpoint_path: Path, dataset_path: Path, batch_size: int, take: int=None,
+             shuffle_buffer: int=None):
     # Vocab
     vocab = get_vocab(str(vocab_path))
 
@@ -64,7 +70,7 @@ def evaluate(vocab_path: Path, checkpoint_path: Path, dataset_path: Path, batch_
         raise RuntimeError("Couldn't load from checkpoint")
 
     # Dataset
-    ds = get_dataset(str(dataset_path), batch_size=batch_size)
+    ds = get_dataset(str(dataset_path), batch_size=batch_size, take=take, shuffle_buffer=shuffle_buffer)
 
     # Metrics
     token_accuracy = tf.keras.metrics.SparseCategoricalAccuracy("token_accuracy")
@@ -88,7 +94,7 @@ def evaluate(vocab_path: Path, checkpoint_path: Path, dataset_path: Path, batch_
     gt_examples = []
     random_sampling_examples = []
     top_5_sampling_examples = []
-    for example in get_dataset(str(dataset_path), batch_size=1).shuffle(1000, seed=42).take(5):
+    for example in get_dataset(str(dataset_path), batch_size=1, take=None).shuffle(1000, seed=42).take(5):
         # Use the first 4 tokens as seed
         gt_examples.append(vocab.decode(example[0].numpy()))
         random_sampling_examples.append(
@@ -125,7 +131,7 @@ def main(argv):
             start_time = time.time()
             print("Starting evaluation of checkpoint '{}'".format(latest_checkpoint))
             res = evaluate(Path(flags.FLAGS.vocab), checkpoint_path, Path(flags.FLAGS.data),
-                     flags.FLAGS.batch_size)
+                     flags.FLAGS.batch_size, flags.FLAGS.take, flags.FLAGS.shuffle_buffer)
             print("Evaluation of checkpoint '{}' finished in {}s".format(latest_checkpoint, time.time() - start_time))
             print(json.dumps(res))
 
