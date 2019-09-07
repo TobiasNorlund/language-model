@@ -55,7 +55,7 @@ def train_loop(ds, transformer_decoder, global_step, ckpt_manager, optimizer, tr
             with tf.GradientTape() as tape:
                 with tf.summary.record_if(tf.math.equal(tf.math.mod(global_step, summarize_every), 0)):
                     predictions, _ = transformer_decoder(tar_inp, True, mask)
-                loss = calculate_loss(loss_object, tar_real, predictions)
+                loss = calculate_loss(tar_real, predictions)
 
             gradients = tape.gradient(loss, transformer_decoder.trainable_variables)
             optimizer.apply_gradients(zip(gradients, transformer_decoder.trainable_variables))
@@ -85,12 +85,12 @@ def train_loop(ds, transformer_decoder, global_step, ckpt_manager, optimizer, tr
             steps_start = time.time()
 
         # Checkpoint every X step
-        if global_step % checkpoint_every == 0:
+        if global_step.numpy() % checkpoint_every == 0:
             ckpt_save_path = ckpt_manager.save(checkpoint_number=global_step)
             print("Saving checkpoint at '{}'".format(ckpt_save_path))
 
-        if not continuous:
-            break
+            if not continuous:
+                break
 
 
 def main(argv):

@@ -7,15 +7,6 @@ from preprocess import get_vocab
 from pathlib import Path
 from decode import decode_encoded, RandomSamplingStrategy, TopKSamplingStrategy
 
-flags.DEFINE_boolean("wait_for_checkpoint", True, help="Whether to wait for next checkpoint when done")
-flags.DEFINE_string("data", None, help="Data tfrecord file")
-flags.DEFINE_string("vocab", None, help="Vocab path")
-flags.DEFINE_string("checkpoint_path", None, help="Model checkpoint path")
-flags.DEFINE_integer("batch_size", 1, help="Batch size")
-flags.DEFINE_integer("take", None, help="Take X examples")
-flags.DEFINE_integer("shuffle_buffer", 1000, help="Shuffle buffer. Only used when 'take' is set")
-flags.mark_flags_as_required(["data", "vocab", "checkpoint_path"])
-
 
 def get_dataset(dataset_path: Path, batch_size: int, take: int=None, shuffle_buffer: int=1000):
     feature_description = {
@@ -50,14 +41,9 @@ def evaluate(vocab_path: Path, checkpoint_path: Path, dataset_path: Path, batch_
     vocab = get_vocab(str(vocab_path))
 
     # Load model
-    transformer_decoder = transformer.TransformerOnlyDecoder(vocab.vocab_size,
-                                                             transformer.hparams.num_layers,
-                                                             transformer.hparams.d_model,
-                                                             transformer.hparams.num_heads,
-                                                             transformer.hparams.dff,
-                                                             transformer.hparams.dropout_rate)
+    transformer_decoder = transformer.TransformerOnlyDecoder(vocab.vocab_size)
 
-    # Global step and epoch counters
+    # Global step counter
     global_step = tf.Variable(0, name="global_step", trainable=False, dtype=tf.int64)
 
     # Restore from checkpoint
@@ -145,4 +131,13 @@ def main(argv):
 
 
 if __name__ == '__main__':
+    flags.DEFINE_boolean("wait_for_checkpoint", True, help="Whether to wait for next checkpoint when done")
+    flags.DEFINE_string("data", None, help="Data tfrecord file")
+    flags.DEFINE_string("vocab", None, help="Vocab path")
+    flags.DEFINE_string("checkpoint_path", None, help="Model checkpoint path")
+    flags.DEFINE_integer("batch_size", 1, help="Batch size")
+    flags.DEFINE_integer("take", None, help="Take X examples")
+    flags.DEFINE_integer("shuffle_buffer", 1000, help="Shuffle buffer. Only used when 'take' is set")
+    flags.mark_flags_as_required(["data", "vocab", "checkpoint_path"])
+
     app.run(main)

@@ -67,7 +67,7 @@ def decode_encoded(seed_encoded, model, end_token_idx, strategy, max_len=100):
 
 def decode(seed_text, vocab, model, strategy, max_len):
     """
-    Decodes text from model, starting from seed_text using the given decoding stretegy
+    Decodes text from model, starting from seed_text using the given decoding strategy
     :param seed_text:
     :param vocab:
     :param model:
@@ -103,11 +103,10 @@ def main(argv):
 
     # Global step and epoch counters
     global_step = tf.Variable(0, name="global_step", trainable=False, dtype=tf.int64)
-    epoch = tf.Variable(0, name="epoch", trainable=False)
 
     # Restore from checkpoint
     checkpoint_path = Path(FLAGS.checkpoint_path)
-    ckpt = tf.train.Checkpoint(transformer_decoder=transformer_decoder, global_step=global_step, epoch=epoch)
+    ckpt = tf.train.Checkpoint(transformer_decoder=transformer_decoder, global_step=global_step)
     ckpt_manager = tf.train.CheckpointManager(ckpt, str(checkpoint_path), max_to_keep=5)
     if ckpt_manager.latest_checkpoint:
         ckpt.restore(ckpt_manager.latest_checkpoint)
