@@ -1,13 +1,12 @@
 import tensorflow as tf
 import numpy as np
-from utils import HParamSet
+import hparams as hp
 
-hparams = HParamSet()
-hparams.add("num_layers", 1, help="Num transformer layers")
-hparams.add("dropout_rate", 0.1, help="Dropout rate")
-hparams.add("d_model", 128, help="d-model")
-hparams.add("num_heads", 4, help="Num self attention heads")
-hparams.add("dff", 512, help="dff")
+hp.add("num_layers", 1, help="Num transformer layers")
+hp.add("dropout_rate", 0.1, help="Dropout rate")
+hp.add("d_model", 128, help="d-model")
+hp.add("num_heads", 4, help="Num self attention heads")
+hp.add("dff", 512, help="dff")
 
 
 def get_angles(pos, i, d_model):
@@ -286,44 +285,44 @@ class Decoder(tf.keras.layers.Layer):
         return x, attention_weights
 
 
-class Transformer(tf.keras.Model):
-
-    def __init__(self, num_layers, d_model, num_heads, dff, input_vocab_size, target_vocab_size,
-                 rate=hparams.dropout_rate):
-        super(Transformer, self).__init__()
-
-        self.encoder = Encoder(num_layers, d_model, num_heads, dff,
-                               input_vocab_size, rate)
-
-        self.decoder = Decoder(num_layers, d_model, num_heads, dff,
-                               target_vocab_size, rate)
-
-        self.final_layer = tf.keras.layers.Dense(target_vocab_size)
-
-    def call(self, inp, tar, training, enc_padding_mask, look_ahead_mask, dec_padding_mask):
-        enc_output = self.encoder(inp, training, enc_padding_mask)  # (batch_size, inp_seq_len, d_model)
-
-        # dec_output.shape == (batch_size, tar_seq_len, d_model)
-        dec_output, attention_weights = self.decoder(
-            tar, enc_output, training, look_ahead_mask, dec_padding_mask)
-
-        final_output = self.final_layer(dec_output)  # (batch_size, tar_seq_len, target_vocab_size)
-
-        return final_output, attention_weights
+# class Transformer(tf.keras.Model):
+#
+#     def __init__(self, num_layers, d_model, num_heads, dff, input_vocab_size, target_vocab_size,
+#                  rate=hparams.dropout_rate):
+#         super(Transformer, self).__init__()
+#
+#         self.encoder = Encoder(num_layers, d_model, num_heads, dff,
+#                                input_vocab_size, rate)
+#
+#         self.decoder = Decoder(num_layers, d_model, num_heads, dff,
+#                                target_vocab_size, rate)
+#
+#         self.final_layer = tf.keras.layers.Dense(target_vocab_size)
+#
+#     def call(self, inp, tar, training, enc_padding_mask, look_ahead_mask, dec_padding_mask):
+#         enc_output = self.encoder(inp, training, enc_padding_mask)  # (batch_size, inp_seq_len, d_model)
+#
+#         # dec_output.shape == (batch_size, tar_seq_len, d_model)
+#         dec_output, attention_weights = self.decoder(
+#             tar, enc_output, training, look_ahead_mask, dec_padding_mask)
+#
+#         final_output = self.final_layer(dec_output)  # (batch_size, tar_seq_len, target_vocab_size)
+#
+#         return final_output, attention_weights
 
 
 class TransformerOnlyDecoder(tf.keras.Model):
 
-    def __init__(self,
-                 target_vocab_size=None,
-                 num_layers=hparams.num_layers,
-                 d_model=hparams.d_model,
-                 num_heads=hparams.num_heads,
-                 dff=hparams.dff,
-                 rate=hparams.dropout_rate):
+    def __init__(self, target_vocab_size=None):
         super(TransformerOnlyDecoder, self).__init__()
         # Note: If target_vocab_size is None, a checkpoint needs to be restored to initialise embeddings
-        self.decoder = Decoder(num_layers, d_model, num_heads, dff, target_vocab_size, rate)
+        self.decoder = Decoder(
+            num_layers=hp.get("num_layers"),
+            d_model=hp.get("d_model"),
+            num_heads=hp.get("num_heads"),
+            dff=hp.get("dff"),
+            target_vocab_size=target_vocab_size,
+            rate=hp.get("dropout_rate"))
 
     def call(self, tar, training, look_ahead_mask):
 
