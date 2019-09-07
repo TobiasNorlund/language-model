@@ -51,6 +51,67 @@ def calculate_loss(loss_obj, real, pred):
     return tf.reduce_mean(tf.boolean_mask(loss_, mask))
 
 
+def train_loop(train_ds, epoch, global_step, transformer_decoder, ckpt_manager, optimizer, train_summary_writer):
+    # Loss
+    loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction='none')
+
+    train_step_signature = [
+        tf.TensorSpec(shape=(None, None), dtype=tf.int64)
+    ]
+
+    @tf.function(input_signature=train_step_signature, experimental_relax_shapes=True)
+    def train_step(batch):
+        print("Hej")
+        tf.print("tf.Hej")
+        tar_inp = batch[:, :-1]
+        tar_real = batch[:, 1:]
+
+        mask = transformer.create_masks(tar_inp)
+
+        with train_summary_writer.as_default():
+
+            with tf.GradientTape() as tape:
+                # with tf.summary.record_if(global_step.numpy() % flags.FLAGS.summarise_every == 0):
+                predictions, _ = transformer_decoder(tar_inp, True, mask)
+                loss = calculate_loss(loss_object, tar_real, predictions)
+
+            gradients = tape.gradient(loss, transformer_decoder.trainable_variables)
+            optimizer.apply_gradients(zip(gradients, transformer_decoder.trainable_variables))
+
+            tf.summary.scalar('loss', loss)
+            tf.summary.scalar("gradient_norm", tf.linalg.global_norm(gradients))
+
+        return loss
+
+    while True:
+        epoch_start = time.time()
+        steps_start = time.time()
+
+        for batch in train_ds:
+            global_step.assign_add(1)
+            tf.summary.experimental.set_step(global_step)
+
+            loss = train_step(batch)
+
+            if global_step.numpy() == 1:
+                print("Number of trainable parameters: {}".format(
+                    np.sum([np.prod(v.get_shape().as_list()) for v in transformer_decoder.trainable_variables])))
+
+            # Print intermediate metrics
+            if global_step.numpy() % 100 == 0:
+                print('Step: {} Loss: {:.4f} ({:.3f}s)'.format(
+                    global_step, loss, time.time() - steps_start))
+                steps_start = time.time()
+            #
+            # # Checkpoint every X step
+            # if global_step % hparams.checkpoint_every == 0:
+            #     ckpt_save_path = ckpt_manager.save(checkpoint_number=global_step)
+            #     print("Saving checkpoint at '{}'".format(ckpt_save_path))
+
+        #print("Epoch {} finished in {} secs".format(epoch, time.time() - epoch_start))
+        epoch.assign_add(1)
+
+
 def main(argv):
     train_ds = get_dataset(Path(flags.FLAGS.train_data),
                            hparams.batch_size,
@@ -65,9 +126,6 @@ def main(argv):
                                                              transformer.hparams.num_heads,
                                                              transformer.hparams.dff,
                                                              transformer.hparams.dropout_rate)
-
-    # Loss
-    loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction='none')
 
     # Optimizer
     optimizer = tf.optimizers.SGD(hparams.learning_rate)
@@ -89,55 +147,8 @@ def main(argv):
     train_log_dir = str(checkpoint_path / "events")
     train_summary_writer = tf.summary.create_file_writer(train_log_dir)
 
-    def train_step(tar):
-        tar_inp = tar[:, :-1]
-        tar_real = tar[:, 1:]
-
-        mask = transformer.create_masks(tar_inp)
-
-        with train_summary_writer.as_default():
-            tf.summary.experimental.set_step(global_step)
-
-            with tf.GradientTape() as tape:
-                with tf.summary.record_if(global_step.numpy() % flags.FLAGS.summarise_every == 0):
-                    predictions, _ = transformer_decoder(tar_inp, True, mask)
-                loss = calculate_loss(loss_object, tar_real, predictions)
-
-            gradients = tape.gradient(loss, transformer_decoder.trainable_variables)
-            optimizer.apply_gradients(zip(gradients, transformer_decoder.trainable_variables))
-
-            tf.summary.scalar('loss', loss, step=global_step.numpy())
-            tf.summary.scalar("gradient_norm", tf.linalg.global_norm(gradients), step=global_step.numpy())
-
-        return loss
-
     try:
-        while True:
-            epoch_start = time.time()
-            steps_start = time.time()
-
-            for batch in train_ds:
-                global_step.assign_add(1)
-                loss = train_step(batch)
-
-                if global_step.numpy() == 1:
-                    print("Number of trainable parameters: {}".format(
-                        np.sum([np.prod(v.get_shape().as_list()) for v in transformer_decoder.trainable_variables])))
-
-                # Print intermediate metrics
-                if global_step.numpy() % 100 == 0:
-                    print('Step: {} Loss: {:.4f} ({:.3f}s)'.format(
-                        global_step.numpy(), loss, time.time() - steps_start))
-                    steps_start = time.time()
-
-                # Checkpoint every X step
-                if global_step.numpy() % hparams.checkpoint_every == 0:
-                    ckpt_save_path = ckpt_manager.save(checkpoint_number=global_step.numpy())
-                    print("Saving checkpoint at '{}'".format(ckpt_save_path))
-
-            print("Epoch {} finished in {} secs".format(epoch.numpy(), time.time() - epoch_start))
-            epoch.assign_add(1)
-
+        train_loop(train_ds, epoch, global_step, transformer_decoder, ckpt_manager, optimizer, train_summary_writer)
     except KeyboardInterrupt:
         pass
 
