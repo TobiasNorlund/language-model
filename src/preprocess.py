@@ -102,7 +102,7 @@ def preprocess(input_file: Path, output_dir: Path, output_name, target_vocab_siz
             if len(encoded_examples) >= max_examples:
                 break
     logging.info("Finished with {} examples".format(len(encoded_examples)))
-    encoded_examples.sort(key=lambda x: len(x))
+    encoded_examples.sort(key=lambda x: -len(x))
     logging.info("Sorted examples")
 
     def encoded_example_gen():  # Only way I could figure out how to turn encoded_examples into a Dataset

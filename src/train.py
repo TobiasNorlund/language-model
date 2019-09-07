@@ -128,7 +128,7 @@ def main(argv):
                                                              transformer.hparams.dropout_rate)
 
     # Optimizer
-    optimizer = tf.optimizers.SGD(hparams.learning_rate)
+    optimizer = tf.keras.optimizers.SGD(hparams.learning_rate)
 
     # Global step and epoch counters
     global_step = tf.Variable(0, name="global_step", trainable=False, dtype=tf.int64)
