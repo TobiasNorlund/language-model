@@ -2,8 +2,8 @@
 
 DOCKER_IMAGE_BASE_NAME:=tobias/language-model
 
-GPU_TAG := 2.0.0b0-gpu-py3
-CPU_TAG := 2.0.0b0-py3
+GPU_TAG := 2.0.0b1-gpu-py3
+CPU_TAG := 2.0.0b1-py3
 
 
 # --- BUILD -----------------------
