@@ -131,7 +131,7 @@ def main(argv):
 
 
 if __name__ == '__main__':
-    flags.DEFINE_boolean("wait_for_checkpoint", True, help="Whether to wait for next checkpoint when done")
+    flags.DEFINE_boolean("wait_for_checkpoint", False, help="Whether to wait for next checkpoint when done")
     flags.DEFINE_string("data", None, help="Data tfrecord file")
     flags.DEFINE_string("vocab", None, help="Vocab path")
     flags.DEFINE_string("checkpoint_path", None, help="Model checkpoint path")
