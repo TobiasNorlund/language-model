@@ -62,7 +62,10 @@ def evaluate(vocab_path: Path, checkpoint_path: Path, dataset_path: Path, batch_
     token_accuracy = tf.keras.metrics.SparseCategoricalAccuracy("token_accuracy")
     log_ppl = tf.keras.metrics.Mean("log_perplexity")
 
-    for batch in ds:
+    eval_step_signature = [tf.TensorSpec(shape=(None, None), dtype=tf.int64)]
+
+    @tf.function(input_signature=eval_step_signature, experimental_relax_shapes=True)
+    def evaluation_step(batch):
         batch_inp = batch[:, :-1]
         batch_tar = batch[:, 1:]
 
@@ -75,6 +78,9 @@ def evaluate(vocab_path: Path, checkpoint_path: Path, dataset_path: Path, batch_
         token_accuracy(batch_tar, logits, sample_weight=padding_mask)
         log_ppl(tf.nn.sparse_softmax_cross_entropy_with_logits(batch_tar, logits) / tf.math.log(2.0),
                 sample_weight=padding_mask)
+
+    for batch in ds:
+        evaluation_step(batch)
 
     # Decode some examples
     gt_examples = []
