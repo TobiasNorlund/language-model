@@ -3,6 +3,7 @@ import numpy as np
 import time
 import hparams as hp
 from model import transformer
+from optimizer import get_optimizer
 from preprocess import get_vocab
 from pathlib import Path
 from absl import app, flags
@@ -10,7 +11,6 @@ from absl import app, flags
 # Training hparams
 hp.add("shuffle_buffer", 100, help="Shuffle buffer")
 hp.add("batch_size", 1, help="Batch size")
-hp.add("learning_rate", 0.01, help="Learning rate")
 
 
 def get_dataset(dataset_path: Path, batch_size: int, shuffle_buffer: int, skip: int = 0):
@@ -100,7 +100,7 @@ def main(argv):
     transformer_decoder = transformer.TransformerOnlyDecoder(vocab_size)
 
     # Optimizer
-    optimizer = tf.keras.optimizers.SGD(hp.get("learning_rate"))
+    optimizer = get_optimizer()
 
     # Global step counter
     global_step = tf.Variable(0, name="global_step", trainable=False, dtype=tf.int64)
