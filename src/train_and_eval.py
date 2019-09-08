@@ -3,19 +3,18 @@ Script that runs train.py for a number of steps, then runs evaluate.py on both t
 """
 import subprocess
 import sys
-from pathlib import Path
 import argparse
+from pathlib import Path
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--data_dir", required=True, type=Path, help="Path to dir with train/test data + vocab")
-parser.add_argument("--checkpoint_path", required=True, help="Checkpoint dir")
-parser.add_argument("--checkpoint_every", required=True, type=int, help="Checkpoint every X step")
-parser.add_argument("--eval_train_take", default=100, help="Num steps to take when evaluating on train set")
-parser.add_argument("--eval_train_shuffle_buffer", default=1000,
-                    help="Shuffle buffer size when evaluating on train set")
+parser.add_argument("--common_args", default="", help="Arguments to supply to all scripts")
+parser.add_argument("--train_args", default="", help="Arguments specific to training")
+parser.add_argument("--eval_train_args", default="", help="Arguments specific to evaluation of training set")
+parser.add_argument("--eval_test_args", default="", help="Arguments specific to evaluation of test set")
 
-args, model_args = parser.parse_known_args()
+args = parser.parse_args()
 
 train_data_path = str(args.data_dir / "train.tfrecord")
 test_data_path = str(args.data_dir / "test.tfrecord")
@@ -28,9 +27,9 @@ def train_and_eval():
     training_cmd = ["python", "train.py",
                     "--data", train_data_path,
                     "--vocab", vocab_path,
-                    "--checkpoint_path", args.checkpoint_path,
-                    "--checkpoint_every", str(args.checkpoint_every),
-                    "--nocontinuous"] + model_args
+                    "--nocontinuous"] + \
+                    args.common_args.split() + \
+                    args.train_args.split()
     training = subprocess.Popen(training_cmd, stdout=sys.stdout)
     print(" ".join(training_cmd))
     return_code = training.wait()
@@ -42,10 +41,9 @@ def train_and_eval():
     # Evaluation on train set
     evaluation_train_cmd = ["python", "evaluate.py",
                             "--data", train_data_path,
-                            "--vocab", vocab_path,
-                            "--checkpoint_path", args.checkpoint_path,
-                            "--take", str(args.eval_train_take),
-                            "--shuffle_buffer", str(args.eval_train_shuffle_buffer)] + model_args
+                            "--vocab", vocab_path] + \
+                            args.common_args.split() + \
+                            args.eval_train_args.split()
     evaluation_train = subprocess.Popen(evaluation_train_cmd, stdout=sys.stdout)
     print("Evaluating on training set")
     print(" ".join(evaluation_train_cmd))
@@ -57,8 +55,9 @@ def train_and_eval():
     # Evaluation on test set
     evaluation_test_cmd = ["python", "evaluate.py",
                            "--data", test_data_path,
-                           "--vocab", vocab_path,
-                           "--checkpoint_path", args.checkpoint_path] + model_args
+                           "--vocab", vocab_path] + \
+                           args.common_args.split() + \
+                           args.eval_test_args.split()
     evaluation_test = subprocess.Popen(evaluation_test_cmd, stdout=sys.stdout)
     print("Evaluating on test set")
     print(" ".join(evaluation_test_cmd))
