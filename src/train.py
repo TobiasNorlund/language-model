@@ -135,7 +135,7 @@ if __name__ == "__main__":
     flags.DEFINE_string("checkpoint_path", None, help="Checkpoint path")
     flags.DEFINE_integer("checkpoint_every", 1000, help="Checkpoint every X step")
     flags.DEFINE_boolean("continuous", True, help="Whether to continue training after checkpointing")
-    flags.DEFINE_integer("summarize_every", 1, help="Summarize model stats every X step")
+    flags.DEFINE_integer("summarize_every", 50, help="Summarize model stats every X step")
     flags.mark_flags_as_required(["data", "vocab", "checkpoint_path"])
 
     app.run(main)
