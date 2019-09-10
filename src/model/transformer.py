@@ -257,7 +257,7 @@ class Decoder(tf.keras.layers.Layer):
         self.num_layers = num_layers
 
         self.embedding = tf.keras.layers.Embedding(target_vocab_size, d_model)
-        self.pos_encoding = positional_encoding(10000, self.d_model)  # TODO: Max length
+        self.pos_encoding = positional_encoding(1000, self.d_model)  # TODO: Max length
 
         self.dec_layers = [DecoderLayer(d_model, num_heads, dff, rate)
                            for _ in range(num_layers)]
@@ -323,13 +323,18 @@ class TransformerOnlyDecoder(tf.keras.Model):
             dff=hp.get("dff"),
             target_vocab_size=target_vocab_size,
             rate=hp.get("dropout_rate"))
+        self.logits_bias = self.add_weight(name="logits_bias",
+                                           shape=(target_vocab_size,),
+                                           initializer='zeros',
+                                           trainable=True)
 
     def call(self, tar, training, look_ahead_mask):
-
         # dec_output.shape == (batch_size, tar_seq_len, d_model)
         dec_output, attention_weights = self.decoder(tar, None, training, look_ahead_mask, None)
 
         # Final projection to vocabulary => logits
         final_output = tf.matmul(dec_output, self.decoder.embedding.embeddings, transpose_b=True)
+        final_output += self.logits_bias
+        tf.summary.histogram("logits_bias", self.logits_bias.value())
 
         return final_output, attention_weights
