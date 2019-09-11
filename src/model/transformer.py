@@ -192,13 +192,26 @@ class DecoderLayer(tf.keras.layers.Layer):
         self.dropout2 = tf.keras.layers.Dropout(rate)
         self.dropout3 = tf.keras.layers.Dropout(rate)
 
+    @staticmethod
+    def summarize_mha_weights(mha):
+        tf.summary.histogram("mha1_q_weights", mha.wq.kernel.value())
+        tf.summary.histogram("mha1_k_weights", mha.wk.kernel.value())
+        tf.summary.histogram("mha1_v_weights", mha.wq.kernel.value())
+        tf.summary.histogram("mha1_q_bias_weights", mha.wq.bias.value())
+        tf.summary.histogram("mha1_k_bias_weights", mha.wk.bias.value())
+        tf.summary.histogram("mha1_v_bias_weights", mha.wq.bias.value())
+
     def call(self, x, enc_output, training, look_ahead_mask, padding_mask):
         # enc_output.shape == (batch_size, input_seq_len, d_model)
 
         attn1, attn_weights_block1 = self.mha1(x, x, x, look_ahead_mask)  # (batch_size, target_seq_len, d_model)
         tf.summary.histogram("mha1", attn1)
+        self.summarize_mha_weights(self.mha1)
+
         attn1 = self.dropout1(attn1, training=training)
         out1 = self.layernorm1(attn1 + x)
+        tf.summary.histogram("layernorm_1_gamma_weights", self.layernorm1.gamma.value())
+        tf.summary.histogram("layernorm_1_beta_weights", self.layernorm1.beta.value())
         tf.summary.histogram("mha1_normed", out1)
 
         if enc_output is not None:
@@ -208,9 +221,13 @@ class DecoderLayer(tf.keras.layers.Layer):
             out2 = self.layernorm2(attn2 + out1)  # (batch_size, target_seq_len, d_model)
         else:
             attn_weights_block2 = None
-            out2 = self.layernorm2(out1)  # (batch_size, target_seq_len, d_model)
+            out2 = out1  # self.layernorm2(out1)  # (batch_size, target_seq_len, d_model)
 
         ffn_output = self.ffn(out2)  # (batch_size, target_seq_len, d_model)
+        tf.summary.histogram("ffn", ffn_output)
+        tf.summary.histogram("ffn_dense_1_weights", self.ffn.layers[0].kernel.value())  # TODO: Niceify
+        tf.summary.histogram("ffn_dense_2_weights", self.ffn.layers[1].kernel.value())
+
         ffn_output = self.dropout3(ffn_output, training=training)
         out3 = self.layernorm3(ffn_output + out2)  # (batch_size, target_seq_len, d_model)
         tf.summary.histogram("out", out3)
@@ -256,7 +273,8 @@ class Decoder(tf.keras.layers.Layer):
         self.d_model = d_model
         self.num_layers = num_layers
 
-        self.embedding = tf.keras.layers.Embedding(target_vocab_size, d_model)
+        self.embedding = tf.keras.layers.Embedding(target_vocab_size, d_model,
+                                                   embeddings_initializer=tf.initializers.RandomNormal())
         self.pos_encoding = positional_encoding(1000, self.d_model)  # TODO: Max length
 
         self.dec_layers = [DecoderLayer(d_model, num_heads, dff, rate)
@@ -268,9 +286,13 @@ class Decoder(tf.keras.layers.Layer):
         attention_weights = {}
 
         x = self.embedding(x)  # (batch_size, target_seq_len, d_model)
-        x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
-        tf.summary.histogram("scaled_embeddings", x)
+        tf.summary.histogram("embeddings", x)
+        tf.summary.histogram("embeddings_weights", self.embedding.embeddings.value())
+
+        #x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
+        # tf.summary.histogram("scaled_embeddings", x)
         x += self.pos_encoding[:, :seq_len, :]
+        tf.summary.histogram("embeddings_and_pos", x)
         x = self.dropout(x, training=training)
 
         for i in range(self.num_layers):
@@ -335,6 +357,7 @@ class TransformerOnlyDecoder(tf.keras.Model):
         # Final projection to vocabulary => logits
         final_output = tf.matmul(dec_output, self.decoder.embedding.embeddings, transpose_b=True)
         final_output += self.logits_bias
-        tf.summary.histogram("logits_bias", self.logits_bias.value())
+        tf.summary.histogram("logits", final_output)
+        tf.summary.histogram("logits_bias_weights", self.logits_bias.value())
 
         return final_output, attention_weights
