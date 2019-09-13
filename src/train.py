@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import time
+import json
 import hparams as hp
 from model import transformer
 from optimizer import get_optimizer
@@ -14,20 +15,20 @@ hp.add("batch_size", 1, help="Batch size")
 
 
 def get_dataset(dataset_path: Path, batch_size: int, shuffle_buffer: int, skip: int = 0):
-    feature_description = {
-        'text': tf.io.VarLenFeature(tf.int64)
-    }
 
-    def _parse_function(example_proto):
-        example = tf.io.parse_single_example(example_proto, feature_description)
-        return tf.sparse.to_dense(example["text"])
+    def parse_json(json_string_tensor):
+        return tf.constant(json.loads(json_string_tensor.numpy())["encoded"], dtype=tf.int64)
 
-    ds = tf.data.TFRecordDataset(str(dataset_path))
-    ds = ds.map(_parse_function)
+    def parse_json_fn(text):
+        return tf.py_function(parse_json, inp=[text], Tout=tf.int64)
+
+    ds = tf.data.TextLineDataset(str(dataset_path))
+    ds = ds.map(parse_json_fn)
     ds = ds.padded_batch(batch_size, padded_shapes=(-1,))
     ds = ds.shuffle(buffer_size=shuffle_buffer, seed=42)
     ds = ds.repeat()
     ds = ds.skip(skip)
+    ds = ds.prefetch(100)
 
     return ds
 
