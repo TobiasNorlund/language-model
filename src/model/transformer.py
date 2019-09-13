@@ -286,13 +286,13 @@ class Decoder(tf.keras.layers.Layer):
         attention_weights = {}
 
         x = self.embedding(x)  # (batch_size, target_seq_len, d_model)
-        tf.summary.histogram("embeddings", x)
-        tf.summary.histogram("embeddings_weights", self.embedding.embeddings.value())
+        # tf.summary.histogram("embeddings", x)
+        # tf.summary.histogram("embeddings_weights", self.embedding.embeddings.value())
 
         #x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
         # tf.summary.histogram("scaled_embeddings", x)
         x += self.pos_encoding[:, :seq_len, :]
-        tf.summary.histogram("embeddings_and_pos", x)
+        # tf.summary.histogram("embeddings_and_pos", x)
         x = self.dropout(x, training=training)
 
         for i in range(self.num_layers):
