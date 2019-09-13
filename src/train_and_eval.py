@@ -16,8 +16,8 @@ parser.add_argument("--eval_test_args", default="", help="Arguments specific to 
 
 args = parser.parse_args()
 
-train_data_path = str(args.data_dir / "train.tfrecord")
-test_data_path = str(args.data_dir / "test.tfrecord")
+train_data_path = str(args.data_dir / "train.encoded.jsonl")
+test_data_path = str(args.data_dir / "test.encoded.jsonl")
 vocab_path = str(args.data_dir / "vocab.subwords")
 
 
