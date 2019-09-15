@@ -276,8 +276,7 @@ class Decoder(tf.keras.layers.Layer):
 
         self.embedding = tf.keras.layers.Embedding(target_vocab_size, d_model,
                                                    embeddings_initializer=tf.initializers.RandomNormal(
-                                                       0, hp.get("embedding_init_variance")),
-                                                   embeddings_regularizer=tf.keras.regularizers.l2(1.0))
+                                                       0, hp.get("embedding_init_variance")))
         self.pos_encoding = positional_encoding(1000, self.d_model)  # TODO: Max length
 
         self.dec_layers = [DecoderLayer(d_model, num_heads, dff, rate)

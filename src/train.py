@@ -35,7 +35,7 @@ def get_dataset(dataset_path: Path, batch_size: int, shuffle_buffer: int, skip: 
 
 def train_loop(ds, transformer_decoder, global_step, ckpt_manager, optimizer, learning_rate, train_summary_writer,
                checkpoint_every, summarize_every, continuous=True):
-    loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction='none')
+    loss_object = tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.1, reduction='none')
     train_step_signature = [tf.TensorSpec(shape=(None, None), dtype=tf.int64)]
 
     def calculate_loss(real, pred):
