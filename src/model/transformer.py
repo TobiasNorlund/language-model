@@ -7,6 +7,7 @@ hp.add("dropout_rate", 0.1, help="Dropout rate")
 hp.add("d_model", 128, help="d-model")
 hp.add("num_heads", 4, help="Num self attention heads")
 hp.add("dff", 512, help="dff")
+hp.add("embedding_init_variance", 0.05, help="Variance of embedding normal init distribution")
 
 
 def get_angles(pos, i, d_model):
@@ -274,7 +275,8 @@ class Decoder(tf.keras.layers.Layer):
         self.num_layers = num_layers
 
         self.embedding = tf.keras.layers.Embedding(target_vocab_size, d_model,
-                                                   embeddings_initializer=tf.initializers.RandomNormal())
+                                                   embeddings_initializer=tf.initializers.RandomNormal(
+                                                       0, hp.get("embedding_init_variance")))
         self.pos_encoding = positional_encoding(1000, self.d_model)  # TODO: Max length
 
         self.dec_layers = [DecoderLayer(d_model, num_heads, dff, rate)
@@ -289,7 +291,7 @@ class Decoder(tf.keras.layers.Layer):
         # tf.summary.histogram("embeddings", x)
         # tf.summary.histogram("embeddings_weights", self.embedding.embeddings.value())
 
-        #x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
+        # x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
         # tf.summary.histogram("scaled_embeddings", x)
         x += self.pos_encoding[:, :seq_len, :]
         # tf.summary.histogram("embeddings_and_pos", x)
