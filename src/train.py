@@ -35,13 +35,15 @@ def get_dataset(dataset_path: Path, batch_size: int, shuffle_buffer: int, skip: 
 
 def train_loop(ds, transformer_decoder, vocab_size, global_step, ckpt_manager, optimizer, learning_rate, train_summary_writer,
                checkpoint_every, summarize_every, continuous=True):
-    loss_object = tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.1, reduction='none')
+    loss_object = tf.keras.losses.CategoricalCrossentropy(from_logits=True, reduction='none')
     train_step_signature = [tf.TensorSpec(shape=(None, None), dtype=tf.int64)]
 
     def calculate_loss(real, pred):
         # Masks padded tokens from loss_object
         mask = tf.math.logical_not(tf.math.equal(real, 0))
-        loss_ = loss_object(tf.one_hot(real, depth=vocab_size), pred)
+        loss_ = loss_object(tf.one_hot(real, depth=vocab_size,
+                                       on_value=0.1,
+                                       off_value=0.9/(vocab_size-1)), pred)
 
         return tf.reduce_mean(tf.boolean_mask(loss_, mask))
 
