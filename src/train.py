@@ -42,8 +42,8 @@ def train_loop(ds, transformer_decoder, vocab_size, global_step, ckpt_manager, o
         # Masks padded tokens from loss_object
         mask = tf.math.logical_not(tf.math.equal(real, 0))
         loss_ = loss_object(tf.one_hot(real, depth=vocab_size,
-                                       on_value=0.1,
-                                       off_value=0.9/(vocab_size-1)), pred)
+                                       on_value=0.9,
+                                       off_value=0.1/(vocab_size-1)), pred)
 
         return tf.reduce_mean(tf.boolean_mask(loss_, mask))
 
@@ -60,8 +60,12 @@ def train_loop(ds, transformer_decoder, vocab_size, global_step, ckpt_manager, o
                     predictions, _ = transformer_decoder(tar_inp, True, mask)
                 loss = calculate_loss(tar_real, predictions)
 
-            gradients = tape.gradient(loss, transformer_decoder.trainable_variables)
+            vars = transformer_decoder.trainable_variables
+            gradients = tape.gradient(loss, vars)
             optimizer.apply_gradients(zip(gradients, transformer_decoder.trainable_variables))
+
+            for i in range(len(vars)):
+                tf.summary.scalar(vars[i].name, tf.linalg.norm(gradients[i]))
 
             tf.summary.scalar("loss", loss)
             tf.summary.scalar("gradient_norm", tf.linalg.global_norm(gradients))

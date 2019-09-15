@@ -291,7 +291,7 @@ class Decoder(tf.keras.layers.Layer):
         # tf.summary.histogram("embeddings", x)
         # tf.summary.histogram("embeddings_weights", self.embedding.embeddings.value())
 
-        # x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
+        x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
         # tf.summary.histogram("scaled_embeddings", x)
         x += self.pos_encoding[:, :seq_len, :]
         # tf.summary.histogram("embeddings_and_pos", x)
