@@ -33,7 +33,7 @@ def get_dataset(dataset_path: Path, batch_size: int, shuffle_buffer: int, skip: 
     return ds
 
 
-def train_loop(ds, transformer_decoder, global_step, ckpt_manager, optimizer, train_summary_writer,
+def train_loop(ds, transformer_decoder, global_step, ckpt_manager, optimizer, learning_rate, train_summary_writer,
                checkpoint_every, summarize_every, continuous=True):
     loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction='none')
     train_step_signature = [tf.TensorSpec(shape=(None, None), dtype=tf.int64)]
@@ -63,6 +63,8 @@ def train_loop(ds, transformer_decoder, global_step, ckpt_manager, optimizer, tr
 
             tf.summary.scalar("loss", loss)
             tf.summary.scalar("gradient_norm", tf.linalg.global_norm(gradients))
+            tf.summary.scalar("learning_rate",
+                              learning_rate if type(learning_rate) is float else learning_rate(global_step))
 
         return loss
 
@@ -101,7 +103,7 @@ def main(argv):
     transformer_decoder = transformer.TransformerOnlyDecoder(vocab_size)
 
     # Optimizer
-    optimizer = get_optimizer()
+    optimizer, learning_rate = get_optimizer()
 
     # Global step counter
     global_step = tf.Variable(0, name="global_step", trainable=False, dtype=tf.int64)
@@ -124,7 +126,7 @@ def main(argv):
                      skip=global_step.numpy())
 
     try:
-        train_loop(ds, transformer_decoder, global_step, ckpt_manager, optimizer, train_summary_writer,
+        train_loop(ds, transformer_decoder, global_step, ckpt_manager, optimizer, learning_rate, train_summary_writer,
                    flags.FLAGS.checkpoint_every, flags.FLAGS.summarize_every, flags.FLAGS.continuous)
     except KeyboardInterrupt:
         pass

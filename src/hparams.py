@@ -29,6 +29,8 @@ def add(name, default_value=None, dtype=None, **kwargs):
         flags.DEFINE_float(name, default_value, **kwargs)
     elif dtype == list:
         flags.DEFINE_enum(name, default_value, **kwargs)
+    elif dtype == bool:
+        flags.DEFINE_bool(name, default_value, **kwargs)
     else:
         raise RuntimeError("Unsupported type for hparam {}".format(name))
     if default_value is None:
