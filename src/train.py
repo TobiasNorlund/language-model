@@ -10,21 +10,27 @@ from pathlib import Path
 from absl import app, flags
 
 # Training hparams
-hp.add("shuffle_buffer", 100, help="Shuffle buffer")
-hp.add("batch_size", 1, help="Batch size")
+hp.add("shuffle_buffer", 1, help="Shuffle buffer")
+hp.add("max_tokens", 100, help="Max tokens")
+hp.add("max_seq_len", 600, help="Max sequence len")
 
 
-def get_dataset(dataset_path: Path, batch_size: int, shuffle_buffer: int, skip: int = 0):
-
+def get_dataset(dataset_path: Path, max_tokens: int, max_seq_len: int, shuffle_buffer: int, skip: int = 0):
     def parse_json(json_string_tensor):
-        return tf.constant(json.loads(json_string_tensor.numpy())["encoded"], dtype=tf.int64)
+        encoded = json.loads(json_string_tensor.numpy())["encoded"]
+        return tf.constant(encoded, dtype=tf.int64, shape=[len(encoded)])
 
     def parse_json_fn(text):
         return tf.py_function(parse_json, inp=[text], Tout=tf.int64)
 
+    boundaries = [i for i in range(1, max_seq_len + 1) if max_tokens % i == 0]
+    batch_sizes = [int(max_tokens / i) for i in range(1, max_seq_len + 1) if max_tokens % i == 0] + [1]
+
     ds = tf.data.TextLineDataset(str(dataset_path))
     ds = ds.map(parse_json_fn)
-    ds = ds.padded_batch(batch_size, padded_shapes=(-1,))
+    ds = ds.apply(tf.data.experimental.bucket_by_sequence_length(lambda x: tf.shape(x),
+                                                                 boundaries,
+                                                                 batch_sizes, padded_shapes=[None]))
     ds = ds.shuffle(buffer_size=shuffle_buffer, seed=42)
     ds = ds.repeat()
     ds = ds.skip(skip)
@@ -33,17 +39,16 @@ def get_dataset(dataset_path: Path, batch_size: int, shuffle_buffer: int, skip: 
     return ds
 
 
+
 def train_loop(ds, transformer_decoder, vocab_size, global_step, ckpt_manager, optimizer, learning_rate, train_summary_writer,
                checkpoint_every, summarize_every, continuous=True):
-    loss_object = tf.keras.losses.CategoricalCrossentropy(from_logits=True, reduction='none')
+    loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction='none')
     train_step_signature = [tf.TensorSpec(shape=(None, None), dtype=tf.int64)]
 
     def calculate_loss(real, pred):
         # Masks padded tokens from loss_object
         mask = tf.math.logical_not(tf.math.equal(real, 0))
-        loss_ = loss_object(tf.one_hot(real, depth=vocab_size,
-                                       on_value=0.9,
-                                       off_value=0.1/(vocab_size-1)), pred)
+        loss_ = loss_object(real, pred)
 
         return tf.reduce_mean(tf.boolean_mask(loss_, mask))
 
@@ -128,7 +133,7 @@ def main(argv):
     train_summary_writer = tf.summary.create_file_writer(train_log_dir)
 
     # Training dataset
-    ds = get_dataset(Path(flags.FLAGS.data), hp.get("batch_size"), hp.get("shuffle_buffer"),
+    ds = get_dataset(Path(flags.FLAGS.data), hp.get("max_tokens"), hp.get("max_seq_len"), hp.get("shuffle_buffer"),
                      skip=global_step.numpy())
 
     try:
