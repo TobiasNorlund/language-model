@@ -94,12 +94,7 @@ def main(argv):
     vocab = get_vocab(str(Path(FLAGS.vocab)))
 
     # Load model
-    transformer_decoder = transformer.TransformerOnlyDecoder(vocab.vocab_size,
-                                                             transformer.hparams.num_layers,
-                                                             transformer.hparams.d_model,
-                                                             transformer.hparams.num_heads,
-                                                             transformer.hparams.dff,
-                                                             transformer.hparams.dropout_rate)
+    transformer_decoder = transformer.TransformerOnlyDecoder()
 
     # Global step and epoch counters
     global_step = tf.Variable(0, name="global_step", trainable=False, dtype=tf.int64)
