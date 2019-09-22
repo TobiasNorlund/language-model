@@ -39,9 +39,8 @@ def get_dataset(dataset_path: Path, max_tokens: int, max_seq_len: int, shuffle_b
     return ds
 
 
-
-def train_loop(ds, transformer_decoder, vocab_size, global_step, ckpt_manager, optimizer, learning_rate, train_summary_writer,
-               checkpoint_every, summarize_every, continuous=True):
+def train_loop(ds, transformer_decoder, global_step, num_examples_processed, ckpt_manager, optimizer, learning_rate,
+               train_summary_writer, checkpoint_every, summarize_every, continuous=True):
     loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction='none')
     train_step_signature = [tf.TensorSpec(shape=(None, None), dtype=tf.int64)]
 
@@ -60,17 +59,17 @@ def train_loop(ds, transformer_decoder, vocab_size, global_step, ckpt_manager, o
         mask = transformer.create_masks(tar_inp)
 
         with train_summary_writer.as_default():
-            with tf.GradientTape() as tape:
-                with tf.summary.record_if(tf.math.equal(tf.math.mod(global_step, summarize_every), 0)):
+            with tf.summary.record_if(tf.math.equal(tf.math.mod(global_step, summarize_every), 0)):
+                with tf.GradientTape() as tape:
                     predictions, _ = transformer_decoder(tar_inp, True, mask)
-                loss = calculate_loss(tar_real, predictions)
+                    loss = calculate_loss(tar_real, predictions)
 
-            vars = transformer_decoder.trainable_variables
-            gradients = tape.gradient(loss, vars)
-            optimizer.apply_gradients(zip(gradients, transformer_decoder.trainable_variables))
+                vars = transformer_decoder.trainable_variables
+                gradients = tape.gradient(loss, vars)
+                optimizer.apply_gradients(zip(gradients, transformer_decoder.trainable_variables))
 
-            for i in range(len(vars)):
-                tf.summary.scalar(vars[i].name, tf.linalg.norm(gradients[i]))
+                for i in range(len(vars)):
+                    tf.summary.scalar("gradient/" + vars[i].name, tf.linalg.norm(gradients[i]))
 
             tf.summary.scalar("loss", loss)
             tf.summary.scalar("gradient_norm", tf.linalg.global_norm(gradients))
@@ -83,6 +82,7 @@ def train_loop(ds, transformer_decoder, vocab_size, global_step, ckpt_manager, o
 
     for batch in ds:
         global_step.assign_add(1)
+        num_examples_processed.assign_add(tf.cast(tf.shape(batch)[0], num_examples_processed.dtype))
         tf.summary.experimental.set_step(global_step)
 
         # Take a gradient step
@@ -94,8 +94,8 @@ def train_loop(ds, transformer_decoder, vocab_size, global_step, ckpt_manager, o
 
         # Print intermediate metrics
         if global_step.numpy() % 100 == 0:
-            print('Step: {} Loss: {:.4f} ({:.3f}s)'.format(
-                global_step.numpy(), loss, time.time() - steps_start))
+            print('Step: {}\tLoss: {:.4f}\tNum examples: {}\tTime: {:.3f}s'.format(
+                global_step.numpy(), loss, num_examples_processed.numpy(), time.time() - steps_start))
             steps_start = time.time()
 
         # Checkpoint every X step
@@ -116,13 +116,14 @@ def main(argv):
     # Optimizer
     optimizer, learning_rate = get_optimizer()
 
-    # Global step counter
+    # Counters
     global_step = tf.Variable(0, name="global_step", trainable=False, dtype=tf.int64)
+    num_examples_processed = tf.Variable(0, name="num_examples_processed", trainable=False, dtype=tf.int64)
 
     # Checkpointing
     checkpoint_path = Path(flags.FLAGS.checkpoint_path)
     ckpt = tf.train.Checkpoint(transformer_decoder=transformer_decoder, optimizer=optimizer,
-                               global_step=global_step)
+                               global_step=global_step, num_examples_processed=num_examples_processed)
     ckpt_manager = tf.train.CheckpointManager(ckpt, str(checkpoint_path), max_to_keep=5)
     if ckpt_manager.latest_checkpoint:
         ckpt.restore(ckpt_manager.latest_checkpoint)
@@ -137,8 +138,8 @@ def main(argv):
                      skip=global_step.numpy())
 
     try:
-        train_loop(ds, transformer_decoder, vocab_size, global_step, ckpt_manager, optimizer, learning_rate,
-                   train_summary_writer, flags.FLAGS.checkpoint_every, flags.FLAGS.summarize_every,
+        train_loop(ds, transformer_decoder, global_step, num_examples_processed, ckpt_manager, optimizer,
+                   learning_rate, train_summary_writer, flags.FLAGS.checkpoint_every, flags.FLAGS.summarize_every,
                    flags.FLAGS.continuous)
     except KeyboardInterrupt:
         pass
