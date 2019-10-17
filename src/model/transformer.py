@@ -187,7 +187,7 @@ class DecoderLayer(tf.keras.layers.Layer):
 
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-        self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        # self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
 
         self.dropout1 = tf.keras.layers.Dropout(rate)
         self.dropout2 = tf.keras.layers.Dropout(rate)
@@ -205,35 +205,36 @@ class DecoderLayer(tf.keras.layers.Layer):
     def call(self, x, enc_output, training, look_ahead_mask, padding_mask):
         # enc_output.shape == (batch_size, input_seq_len, d_model)
 
+        x = self.layernorm1(x)
         attn1, attn_weights_block1 = self.mha1(x, x, x, look_ahead_mask)  # (batch_size, target_seq_len, d_model)
         tf.summary.histogram("mha1", attn1)
         self.summarize_mha_weights(self.mha1)
 
         attn1 = self.dropout1(attn1, training=training)
-        out1 = self.layernorm1(attn1 + x)
+        out1 = self.layernorm2(attn1 + x)
         tf.summary.histogram("layernorm_1_gamma_weights", self.layernorm1.gamma.value())
         tf.summary.histogram("layernorm_1_beta_weights", self.layernorm1.beta.value())
         tf.summary.histogram("mha1_normed", out1)
 
-        if enc_output is not None:
-            attn2, attn_weights_block2 = self.mha2(
-                enc_output, enc_output, out1, padding_mask)  # (batch_size, target_seq_len, d_model)
-            attn2 = self.dropout2(attn2, training=training)
-            out2 = self.layernorm2(attn2 + out1)  # (batch_size, target_seq_len, d_model)
-        else:
-            attn_weights_block2 = None
-            out2 = out1  # self.layernorm2(out1)  # (batch_size, target_seq_len, d_model)
+        #if enc_output is not None:
+        #    attn2, attn_weights_block2 = self.mha2(
+        #        enc_output, enc_output, out1, padding_mask)  # (batch_size, target_seq_len, d_model)
+        #    attn2 = self.dropout2(attn2, training=training)
+        #    out2 = self.layernorm2(attn2 + out1)  # (batch_size, target_seq_len, d_model)
+        #else:
+        attn_weights_block2 = None
+        #    out2 = out1  # self.layernorm2(out1)  # (batch_size, target_seq_len, d_model)
 
-        ffn_output = self.ffn(out2)  # (batch_size, target_seq_len, d_model)
+        ffn_output = self.ffn(out1)  # (batch_size, target_seq_len, d_model)
         tf.summary.histogram("ffn", ffn_output)
         tf.summary.histogram("ffn_dense_1_weights", self.ffn.layers[0].kernel.value())  # TODO: Niceify
         tf.summary.histogram("ffn_dense_2_weights", self.ffn.layers[1].kernel.value())
 
         ffn_output = self.dropout3(ffn_output, training=training)
-        out3 = self.layernorm3(ffn_output + out2)  # (batch_size, target_seq_len, d_model)
-        tf.summary.histogram("out", out3)
+        #out3 = self.layernorm3(ffn_output + out1)  # (batch_size, target_seq_len, d_model)
+        tf.summary.histogram("out", ffn_output)
 
-        return out3, attn_weights_block1, attn_weights_block2
+        return ffn_output, attn_weights_block1, attn_weights_block2
 
 
 class Encoder(tf.keras.layers.Layer):
@@ -282,6 +283,7 @@ class Decoder(tf.keras.layers.Layer):
         self.dec_layers = [DecoderLayer(d_model, num_heads, dff, rate)
                            for _ in range(num_layers)]
         self.dropout = tf.keras.layers.Dropout(rate)
+        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
 
     def call(self, x, enc_output, training, look_ahead_mask, padding_mask):
         seq_len = tf.shape(x)[1]
@@ -304,6 +306,8 @@ class Decoder(tf.keras.layers.Layer):
 
                 attention_weights['decoder_layer{}_block1'.format(i + 1)] = block1
                 attention_weights['decoder_layer{}_block2'.format(i + 1)] = block2
+
+        x = self.layernorm(x)
 
         # x.shape == (batch_size, target_seq_len, d_model)
         return x, attention_weights
