@@ -9,6 +9,8 @@ hp.add("num_heads", 4, help="Num self attention heads")
 hp.add("dff", 512, help="dff")
 hp.add("embedding_init_variance", 0.05, help="Variance of embedding normal init distribution")
 
+DENSE_INITIALIZER = tf.keras.initializers.RandomUniform(-0.02, 0.02)
+
 
 def get_angles(pos, i, d_model):
     angle_rates = 1 / np.power(10000, (2 * (i // 2)) / np.float32(d_model))
@@ -96,8 +98,8 @@ def scaled_dot_product_attention(q, k, v, mask):
 
 def point_wise_feed_forward_network(d_model, dff):
     return tf.keras.Sequential([
-        tf.keras.layers.Dense(dff, activation='relu', kernel_initializer="lecun_uniform"),  # (batch_size, seq_len, dff)
-        tf.keras.layers.Dense(d_model, kernel_initializer="lecun_uniform")  # (batch_size, seq_len, d_model)
+        tf.keras.layers.Dense(dff, activation='relu', kernel_initializer=DENSE_INITIALIZER),  # (batch_size, seq_len, dff)
+        tf.keras.layers.Dense(d_model, kernel_initializer=DENSE_INITIALIZER)  # (batch_size, seq_len, d_model)
     ])
 
 
@@ -111,11 +113,11 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         self.depth = d_model // self.num_heads
 
-        self.wq = tf.keras.layers.Dense(d_model, kernel_initializer="lecun_uniform")
-        self.wk = tf.keras.layers.Dense(d_model, kernel_initializer="lecun_uniform")
-        self.wv = tf.keras.layers.Dense(d_model, kernel_initializer="lecun_uniform")
+        self.wq = tf.keras.layers.Dense(d_model, kernel_initializer=DENSE_INITIALIZER)
+        self.wk = tf.keras.layers.Dense(d_model, kernel_initializer=DENSE_INITIALIZER)
+        self.wv = tf.keras.layers.Dense(d_model, kernel_initializer=DENSE_INITIALIZER)
 
-        self.dense = tf.keras.layers.Dense(d_model, kernel_initializer="lecun_uniform")
+        self.dense = tf.keras.layers.Dense(d_model, kernel_initializer=DENSE_INITIALIZER)
 
     def split_heads(self, x, batch_size):
         """Split the last dimension into (num_heads, depth).
