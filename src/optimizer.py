@@ -2,7 +2,7 @@ import hparams as hp
 import tensorflow as tf
 from model.learning_rate_schedule import CustomSchedule
 
-hp.add("optimizer", "sgd", enum_values=["sgd", "adam", "rmsprop"], dtype=list, help="Optimizer")
+hp.add("optimizer", "sgd", enum_values=["sgd", "adam", "rmsprop", "adagrad"], dtype=list, help="Optimizer")
 hp.add("learning_rate", 0.01, help="Learning rate")
 hp.add("learning_rate_schedule", False, help="Use learning rate schedule")
 hp.add("learning_rate_schedule_constant", 1.0, help="Learning rate schedule constant")
@@ -28,3 +28,5 @@ def get_optimizer():
         return tf.keras.optimizers.RMSprop(learning_rate,
                                            hp.get("rmsprop_rho"),
                                            hp.get("momentum")), learning_rate
+    elif hp.get("optimizer") == "adagrad":
+        return tf.keras.optimizers.Adagrad(learning_rate), learning_rate
