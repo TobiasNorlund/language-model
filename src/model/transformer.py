@@ -9,7 +9,7 @@ hp.add("num_heads", 4, help="Num self attention heads")
 hp.add("dff", 512, help="dff")
 hp.add("embedding_init_variance", 0.05, help="Variance of embedding normal init distribution")
 
-DENSE_INITIALIZER = tf.keras.initializers.RandomUniform(-0.02, 0.02)
+DENSE_INITIALIZER = tf.keras.initializers.RandomUniform(-0.01, 0.01)
 
 
 def get_angles(pos, i, d_model):
