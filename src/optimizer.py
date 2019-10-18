@@ -11,26 +11,29 @@ hp.add("momentum", 0.0, help="Momentum for optimizer")
 hp.add("adam_beta_1", 0.9, help="Beta 1 for Adam optimizer")
 hp.add("adam_beta_2", 0.999, help="Beta 2 for Adam optimizer")
 hp.add("rmsprop_rho", 0.9, help="Rho value for RMSprop")
-hp.add("clipnorm", None, dtype=float, help="Clip the gradient to the specified l2 norm")
+hp.add("clipnorm", 0.0, help="Clip the gradient to the specified l2 norm")
 
 
 def get_optimizer():
     learning_rate = CustomSchedule(hp.get("d_model"), hp.get("learning_rate_schedule_constant"),
                                    hp.get("learning_rate_warmup_steps")) \
         if hp.get("learning_rate_schedule") else hp.get("learning_rate")
+
+    kwargs = {"clipnorm": hp.get("clipnorm")} if hp.get("clipnorm") > 0.0 else {}
+
     if hp.get("optimizer") == "sgd":
         return tf.keras.optimizers.SGD(learning_rate,
-                                       hp.get("momentum"), clipnorm=hp.get("clipnorm")), learning_rate
+                                       hp.get("momentum"), **kwargs), learning_rate
     elif hp.get("optimizer") == "adam":
         return tf.keras.optimizers.Adam(learning_rate,
                                         hp.get("adam_beta_1"),
                                         hp.get("adam_beta_2"),
-                                        clipnorm=hp.get("clipnorm")), learning_rate
+                                        **kwargs), learning_rate
     elif hp.get("optimizer") == "rmsprop":
         return tf.keras.optimizers.RMSprop(learning_rate,
                                            hp.get("rmsprop_rho"),
                                            hp.get("momentum"),
-                                           clipnorm=hp.get("clipnorm")), learning_rate
+                                           **kwargs), learning_rate
     elif hp.get("optimizer") == "adagrad":
         return tf.keras.optimizers.Adagrad(learning_rate,
-                                           clipnorm=hp.get("clipnorm")), learning_rate
+                                           **kwargs), learning_rate
