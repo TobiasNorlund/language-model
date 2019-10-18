@@ -98,8 +98,8 @@ def scaled_dot_product_attention(q, k, v, mask):
 
 def point_wise_feed_forward_network(d_model, dff):
     return tf.keras.Sequential([
-        tf.keras.layers.Dense(dff, activation='relu', kernel_initializer=DENSE_INITIALIZER),  # (batch_size, seq_len, dff)
-        tf.keras.layers.Dense(d_model, kernel_initializer=DENSE_INITIALIZER)  # (batch_size, seq_len, d_model)
+        tf.keras.layers.Dense(dff, activation='relu', kernel_initializer="glorot_uniform", name="ffn1"),  # (batch_size, seq_len, dff)
+        tf.keras.layers.Dense(d_model, kernel_initializer="glorot_uniform", name="ffn2")  # (batch_size, seq_len, d_model)
     ])
 
 
@@ -113,11 +113,11 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         self.depth = d_model // self.num_heads
 
-        self.wq = tf.keras.layers.Dense(d_model, kernel_initializer=DENSE_INITIALIZER)
-        self.wk = tf.keras.layers.Dense(d_model, kernel_initializer=DENSE_INITIALIZER)
-        self.wv = tf.keras.layers.Dense(d_model, kernel_initializer=DENSE_INITIALIZER)
+        self.wq = tf.keras.layers.Dense(d_model, kernel_initializer=DENSE_INITIALIZER, name="q")
+        self.wk = tf.keras.layers.Dense(d_model, kernel_initializer=DENSE_INITIALIZER, name="k")
+        self.wv = tf.keras.layers.Dense(d_model, kernel_initializer=DENSE_INITIALIZER, name="v")
 
-        self.dense = tf.keras.layers.Dense(d_model, kernel_initializer=DENSE_INITIALIZER)
+        self.dense = tf.keras.layers.Dense(d_model, kernel_initializer=DENSE_INITIALIZER, name="merge")
 
     def split_heads(self, x, batch_size):
         """Split the last dimension into (num_heads, depth).
