@@ -9,7 +9,7 @@ hp.add("num_heads", 4, help="Num self attention heads")
 hp.add("dff", 512, help="dff")
 
 # TEMP
-INITIALIZATION_SCALE = 1.0 / tf.math.sqrt(20)
+INITIALIZATION_SCALE = 1.0 / tf.math.sqrt(20.0)
 
 
 def get_angles(pos, i, d_model):
