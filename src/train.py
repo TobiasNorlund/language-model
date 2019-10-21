@@ -60,7 +60,7 @@ def train_loop(ds, transformer_decoder, global_step, num_examples_processed, ckp
 
         with train_summary_writer.as_default():
             with tf.summary.record_if(tf.math.equal(tf.math.mod(global_step, summarize_every), 0)):
-                with tf.GradientTape() as tape, tf.summary.experimental.summary_scope("activation"):
+                with tf.GradientTape() as tape:
                     predictions, _ = transformer_decoder(tar_inp, True, mask)
                     loss = calculate_loss(tar_real, predictions)
 
