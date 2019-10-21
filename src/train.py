@@ -60,7 +60,7 @@ def train_loop(ds, transformer_decoder, global_step, num_examples_processed, ckp
 
         with train_summary_writer.as_default():
             with tf.summary.record_if(tf.math.equal(tf.math.mod(global_step, summarize_every), 0)):
-                with tf.GradientTape() as tape:
+                with tf.GradientTape() as tape, tf.summary.experimental.summary_scope("activation"):
                     predictions, _ = transformer_decoder(tar_inp, True, mask)
                     loss = calculate_loss(tar_real, predictions)
 
@@ -70,6 +70,7 @@ def train_loop(ds, transformer_decoder, global_step, num_examples_processed, ckp
 
                 for i in range(len(vars)):
                     tf.summary.scalar("gradient/" + vars[i].name, tf.linalg.norm(gradients[i]))
+                    tf.summary.scalar("variable/" + vars[i].name, tf.linalg.norm(vars[i]))
 
             tf.summary.scalar("loss", loss)
             tf.summary.scalar("gradient_norm", tf.linalg.global_norm(gradients))

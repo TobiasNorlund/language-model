@@ -3,13 +3,10 @@ import numpy as np
 import hparams as hp
 
 hp.add("num_layers", 1, help="Num transformer layers")
-hp.add("dropout_rate", 0.1, help="Dropout rate")
+hp.add("dropout_rate", 0.0, help="Dropout rate")
 hp.add("d_model", 128, help="d-model")
 hp.add("num_heads", 4, help="Num self attention heads")
 hp.add("dff", 512, help="dff")
-hp.add("embedding_init_variance", 0.05, help="Variance of embedding normal init distribution")
-
-DENSE_INITIALIZER = tf.keras.initializers.RandomUniform(-0.01, 0.01)
 
 
 def get_angles(pos, i, d_model):
@@ -97,9 +94,11 @@ def scaled_dot_product_attention(q, k, v, mask):
 
 
 def point_wise_feed_forward_network(d_model, dff):
+    initializer1 = tf.initializers.VarianceScaling(1.0, mode="fan_in", distribution="normal", seed=42)  # Xavier
+    initializer2 = tf.initializers.VarianceScaling(2.0, mode="fan_in", distribution="normal", seed=42)  # He
     return tf.keras.Sequential([
-        tf.keras.layers.Dense(dff, activation='relu', kernel_initializer="glorot_uniform", name="ffn1"),  # (batch_size, seq_len, dff)
-        tf.keras.layers.Dense(d_model, kernel_initializer="glorot_uniform", name="ffn2")  # (batch_size, seq_len, d_model)
+        tf.keras.layers.Dense(dff, activation='relu', kernel_initializer=initializer1, name="ffn1"),  # (batch_size, seq_len, dff)
+        tf.keras.layers.Dense(d_model, kernel_initializer=initializer2, name="ffn2")  # (batch_size, seq_len, d_model)
     ])
 
 
@@ -113,11 +112,12 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         self.depth = d_model // self.num_heads
 
-        self.wq = tf.keras.layers.Dense(d_model, kernel_initializer=DENSE_INITIALIZER, name="q")
-        self.wk = tf.keras.layers.Dense(d_model, kernel_initializer=DENSE_INITIALIZER, name="k")
-        self.wv = tf.keras.layers.Dense(d_model, kernel_initializer=DENSE_INITIALIZER, name="v")
+        initializer = tf.initializers.VarianceScaling(1.0, mode="fan_in", distribution="normal", seed=42)
+        self.wq = tf.keras.layers.Dense(d_model, kernel_initializer=initializer, name="q")
+        self.wk = tf.keras.layers.Dense(d_model, kernel_initializer=initializer, name="k")
+        self.wv = tf.keras.layers.Dense(d_model, kernel_initializer=initializer, name="v")
 
-        self.dense = tf.keras.layers.Dense(d_model, kernel_initializer=DENSE_INITIALIZER, name="merge")
+        self.dense = tf.keras.layers.Dense(d_model, kernel_initializer=initializer, name="merge")
 
     def split_heads(self, x, batch_size):
         """Split the last dimension into (num_heads, depth).
@@ -153,161 +153,148 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         return output, attention_weights
 
 
-class EncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, d_model, num_heads, dff, rate):
-        super(EncoderLayer, self).__init__()
-
-        self.mha = MultiHeadAttention(d_model, num_heads)
-        self.ffn = point_wise_feed_forward_network(d_model, dff)
-
-        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-
-        self.dropout1 = tf.keras.layers.Dropout(rate)
-        self.dropout2 = tf.keras.layers.Dropout(rate)
-
-    def call(self, x, training, mask):
-        attn_output, _ = self.mha(x, x, x, mask)  # (batch_size, input_seq_len, d_model)
-        attn_output = self.dropout1(attn_output, training=training)
-        out1 = self.layernorm1(x + attn_output)  # (batch_size, input_seq_len, d_model)
-
-        ffn_output = self.ffn(out1)  # (batch_size, input_seq_len, d_model)
-        ffn_output = self.dropout2(ffn_output, training=training)
-        out2 = self.layernorm2(out1 + ffn_output)  # (batch_size, input_seq_len, d_model)
-
-        return out2
+# class EncoderLayer(tf.keras.layers.Layer):
+#     def __init__(self, d_model, num_heads, dff, rate):
+#         super(EncoderLayer, self).__init__()
+#
+#         self.mha = MultiHeadAttention(d_model, num_heads)
+#         self.ffn = point_wise_feed_forward_network(d_model, dff)
+#
+#         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+#         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+#
+#         self.dropout1 = tf.keras.layers.Dropout(rate)
+#         self.dropout2 = tf.keras.layers.Dropout(rate)
+#
+#     def call(self, x, training, mask):
+#         attn_output, _ = self.mha(x, x, x, mask)  # (batch_size, input_seq_len, d_model)
+#         attn_output = self.dropout1(attn_output, training=training)
+#         out1 = self.layernorm1(x + attn_output)  # (batch_size, input_seq_len, d_model)
+#
+#         ffn_output = self.ffn(out1)  # (batch_size, input_seq_len, d_model)
+#         ffn_output = self.dropout2(ffn_output, training=training)
+#         out2 = self.layernorm2(out1 + ffn_output)  # (batch_size, input_seq_len, d_model)
+#
+#         return out2
 
 
 class DecoderLayer(tf.keras.layers.Layer):
-    def __init__(self, d_model, num_heads, dff, rate):
-        super(DecoderLayer, self).__init__()
+    def __init__(self, d_model, num_heads, dff, rate, **kwargs):
+        super(DecoderLayer, self).__init__(**kwargs)
 
         self.mha1 = MultiHeadAttention(d_model, num_heads)
-        self.mha2 = MultiHeadAttention(d_model, num_heads)
+        # self.mha2 = MultiHeadAttention(d_model, num_heads)
 
         self.ffn = point_wise_feed_forward_network(d_model, dff)
 
-        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, center=False, scale=False)
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, center=False, scale=False)
         # self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
 
         self.dropout1 = tf.keras.layers.Dropout(rate)
-        self.dropout2 = tf.keras.layers.Dropout(rate)
+        # self.dropout2 = tf.keras.layers.Dropout(rate)
         self.dropout3 = tf.keras.layers.Dropout(rate)
-
-    @staticmethod
-    def summarize_mha_weights(mha):
-        tf.summary.histogram("mha1_q_weights", mha.wq.kernel.value())
-        tf.summary.histogram("mha1_k_weights", mha.wk.kernel.value())
-        tf.summary.histogram("mha1_v_weights", mha.wq.kernel.value())
-        tf.summary.histogram("mha1_q_bias_weights", mha.wq.bias.value())
-        tf.summary.histogram("mha1_k_bias_weights", mha.wk.bias.value())
-        tf.summary.histogram("mha1_v_bias_weights", mha.wq.bias.value())
 
     def call(self, x, enc_output, training, look_ahead_mask, padding_mask):
         # enc_output.shape == (batch_size, input_seq_len, d_model)
+        tf.summary.scalar("input_variance", tf.math.reduce_variance(x))
 
         x = self.layernorm1(x)
         attn1, attn_weights_block1 = self.mha1(x, x, x, look_ahead_mask)  # (batch_size, target_seq_len, d_model)
-        tf.summary.histogram("mha1", attn1)
-        self.summarize_mha_weights(self.mha1)
+        tf.summary.histogram("mha", attn1)
 
         attn1 = self.dropout1(attn1, training=training)
         out1 = self.layernorm2(attn1 + x)
-        tf.summary.histogram("layernorm_1_gamma_weights", self.layernorm1.gamma.value())
-        tf.summary.histogram("layernorm_1_beta_weights", self.layernorm1.beta.value())
-        tf.summary.histogram("mha1_normed", out1)
+        tf.summary.histogram("mha_normed", out1)
 
-        #if enc_output is not None:
+        # if enc_output is not None:
         #    attn2, attn_weights_block2 = self.mha2(
         #        enc_output, enc_output, out1, padding_mask)  # (batch_size, target_seq_len, d_model)
         #    attn2 = self.dropout2(attn2, training=training)
         #    out2 = self.layernorm2(attn2 + out1)  # (batch_size, target_seq_len, d_model)
-        #else:
+        # else:
         attn_weights_block2 = None
         #    out2 = out1  # self.layernorm2(out1)  # (batch_size, target_seq_len, d_model)
 
         ffn_output = self.ffn(out1)  # (batch_size, target_seq_len, d_model)
         tf.summary.histogram("ffn", ffn_output)
-        tf.summary.histogram("ffn_dense_1_weights", self.ffn.layers[0].kernel.value())  # TODO: Niceify
-        tf.summary.histogram("ffn_dense_2_weights", self.ffn.layers[1].kernel.value())
 
         ffn_output = self.dropout3(ffn_output, training=training)
-        #out3 = self.layernorm3(ffn_output + out1)  # (batch_size, target_seq_len, d_model)
+        # out3 = self.layernorm3(ffn_output + out1)  # (batch_size, target_seq_len, d_model)
         tf.summary.histogram("out", ffn_output)
 
         return ffn_output, attn_weights_block1, attn_weights_block2
 
 
-class Encoder(tf.keras.layers.Layer):
-    def __init__(self, num_layers, d_model, num_heads, dff, input_vocab_size, rate):
-        super(Encoder, self).__init__()
-
-        self.d_model = d_model
-        self.num_layers = num_layers
-
-        self.embedding = tf.keras.layers.Embedding(input_vocab_size, d_model)
-        self.pos_encoding = positional_encoding(input_vocab_size, self.d_model)
-
-        self.enc_layers = [EncoderLayer(d_model, num_heads, dff, rate)
-                           for _ in range(num_layers)]
-
-        self.dropout = tf.keras.layers.Dropout(rate)
-
-    def call(self, x, training, mask):
-        seq_len = tf.shape(x)[1]
-
-        # adding embedding and position encoding.
-        x = self.embedding(x)  # (batch_size, input_seq_len, d_model)
-        x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
-        x += self.pos_encoding[:, :seq_len, :]
-
-        x = self.dropout(x, training=training)
-
-        for i in range(self.num_layers):
-            x = self.enc_layers[i](x, training, mask)
-
-        return x  # (batch_size, input_seq_len, d_model)
+# class Encoder(tf.keras.layers.Layer):
+#     def __init__(self, num_layers, d_model, num_heads, dff, input_vocab_size, rate):
+#         super(Encoder, self).__init__()
+#
+#         self.d_model = d_model
+#         self.num_layers = num_layers
+#
+#         self.embedding = tf.keras.layers.Embedding(input_vocab_size, d_model)
+#         self.pos_encoding = positional_encoding(input_vocab_size, self.d_model)
+#
+#         self.enc_layers = [EncoderLayer(d_model, num_heads, dff, rate)
+#                            for _ in range(num_layers)]
+#
+#         self.dropout = tf.keras.layers.Dropout(rate)
+#
+#     def call(self, x, training, mask):
+#         seq_len = tf.shape(x)[1]
+#
+#         # adding embedding and position encoding.
+#         x = self.embedding(x)  # (batch_size, input_seq_len, d_model)
+#         x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
+#         x += self.pos_encoding[:, :seq_len, :]
+#
+#         x = self.dropout(x, training=training)
+#
+#         for i in range(self.num_layers):
+#             x = self.enc_layers[i](x, training, mask)
+#
+#         return x  # (batch_size, input_seq_len, d_model)
 
 
 class Decoder(tf.keras.layers.Layer):
-    def __init__(self, num_layers, d_model, num_heads, dff, target_vocab_size, rate):
-        super(Decoder, self).__init__()
+    def __init__(self, num_layers, d_model, num_heads, dff, target_vocab_size, rate, **kwargs):
+        super(Decoder, self).__init__(**kwargs)
 
         self.d_model = d_model
         self.num_layers = num_layers
 
+        embedding_initializer = tf.initializers.VarianceScaling(1.0, mode="fan_out", distribution="normal", seed=42)
         self.embedding = tf.keras.layers.Embedding(target_vocab_size, d_model,
-                                                   embeddings_initializer=tf.initializers.RandomNormal(
-                                                       0, hp.get("embedding_init_variance")))
+                                                   embeddings_initializer=embedding_initializer)
         self.pos_encoding = positional_encoding(1000, self.d_model)  # TODO: Max length
 
-        self.dec_layers = [DecoderLayer(d_model, num_heads, dff, rate)
-                           for _ in range(num_layers)]
+        self.dec_layers = [DecoderLayer(d_model, num_heads, dff, rate, name="layer_{}".format(i))
+                           for i in range(num_layers)]
         self.dropout = tf.keras.layers.Dropout(rate)
-        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6, center=False, scale=False)
 
     def call(self, x, enc_output, training, look_ahead_mask, padding_mask):
         seq_len = tf.shape(x)[1]
         attention_weights = {}
 
         x = self.embedding(x)  # (batch_size, target_seq_len, d_model)
+        tf.summary.scalar("embedding_variance", tf.math.reduce_variance(x))
         # tf.summary.histogram("embeddings", x)
-        # tf.summary.histogram("embeddings_weights", self.embedding.embeddings.value())
 
+        # Scale embeddings so that variance = 1.0 (at start)
         x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
-        # tf.summary.histogram("scaled_embeddings", x)
+        tf.summary.scalar("scaled_embedding_variance", tf.math.reduce_variance(x))
+
         x += self.pos_encoding[:, :seq_len, :]
-        # tf.summary.histogram("embeddings_and_pos", x)
         x = self.dropout(x, training=training)
 
         for i in range(self.num_layers):
-            with tf.summary.experimental.summary_scope("layer_{}".format(i)):
-                x, block1, block2 = self.dec_layers[i](x, enc_output, training,
-                                                       look_ahead_mask, padding_mask)
+            x, block1, block2 = self.dec_layers[i](x, enc_output, training,
+                                                   look_ahead_mask, padding_mask)
 
-                attention_weights['decoder_layer{}_block1'.format(i + 1)] = block1
-                attention_weights['decoder_layer{}_block2'.format(i + 1)] = block2
+            attention_weights['decoder_layer{}_block1'.format(i + 1)] = block1
+            attention_weights['decoder_layer{}_block2'.format(i + 1)] = block2
 
         x = self.layernorm(x)
 
@@ -362,7 +349,7 @@ class TransformerOnlyDecoder(tf.keras.Model):
         # dec_output.shape == (batch_size, tar_seq_len, d_model)
         dec_output, attention_weights = self.decoder(tar, None, training, look_ahead_mask, None)
 
-        # Final projection to vocabulary => logits
+        # Final projection to vocabulary => logits, logits should have variance ~1.0 at start
         final_output = tf.matmul(dec_output, self.decoder.embedding.embeddings, transpose_b=True)
         # final_output += self.logits_bias
         tf.summary.histogram("logits", final_output)
