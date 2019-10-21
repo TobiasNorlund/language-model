@@ -8,6 +8,9 @@ hp.add("d_model", 128, help="d-model")
 hp.add("num_heads", 4, help="Num self attention heads")
 hp.add("dff", 512, help="dff")
 
+# TEMP
+INITIALIZATION_SCALE = 1.0 / tf.sqrt(20)
+
 
 def get_angles(pos, i, d_model):
     angle_rates = 1 / np.power(10000, (2 * (i // 2)) / np.float32(d_model))
@@ -94,8 +97,8 @@ def scaled_dot_product_attention(q, k, v, mask):
 
 
 def point_wise_feed_forward_network(d_model, dff):
-    initializer1 = tf.initializers.VarianceScaling(1.0, mode="fan_in", distribution="normal", seed=42)  # Xavier
-    initializer2 = tf.initializers.VarianceScaling(2.0, mode="fan_in", distribution="normal", seed=42)  # He
+    initializer1 = tf.initializers.VarianceScaling(1.0 * INITIALIZATION_SCALE, mode="fan_in", distribution="normal", seed=42)  # Xavier
+    initializer2 = tf.initializers.VarianceScaling(2.0 * INITIALIZATION_SCALE, mode="fan_in", distribution="normal", seed=42)  # He
     return tf.keras.Sequential([
         tf.keras.layers.Dense(dff, activation='relu', kernel_initializer=initializer1, name="ffn1"),  # (batch_size, seq_len, dff)
         tf.keras.layers.Dense(d_model, kernel_initializer=initializer2, name="ffn2")  # (batch_size, seq_len, d_model)
@@ -112,7 +115,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         self.depth = d_model // self.num_heads
 
-        initializer = tf.initializers.VarianceScaling(1.0, mode="fan_in", distribution="normal", seed=42)
+        initializer = tf.initializers.VarianceScaling(1.0 * INITIALIZATION_SCALE, mode="fan_in", distribution="normal", seed=42)
         self.wq = tf.keras.layers.Dense(d_model, kernel_initializer=initializer, name="q")
         self.wk = tf.keras.layers.Dense(d_model, kernel_initializer=initializer, name="k")
         self.wv = tf.keras.layers.Dense(d_model, kernel_initializer=initializer, name="v")
