@@ -28,12 +28,12 @@ def get_dataset(dataset_path: Path, max_tokens: int, max_seq_len: int, shuffle_b
 
     ds = tf.data.TextLineDataset(str(dataset_path))
     ds = ds.shuffle(buffer_size=shuffle_buffer, seed=42)
+    ds = ds.repeat()
     ds = ds.skip(skip)
     ds = ds.map(parse_json_fn)
     ds = ds.apply(tf.data.experimental.bucket_by_sequence_length(lambda x: tf.shape(x),
                                                                  boundaries,
                                                                  batch_sizes, padded_shapes=[None]))
-    ds = ds.repeat()
     ds = ds.prefetch(100)
 
     return ds
