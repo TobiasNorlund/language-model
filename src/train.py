@@ -27,13 +27,13 @@ def get_dataset(dataset_path: Path, max_tokens: int, max_seq_len: int, shuffle_b
     batch_sizes = [int(max_tokens / i) for i in range(1, max_seq_len + 1) if max_tokens % i == 0] + [1]
 
     ds = tf.data.TextLineDataset(str(dataset_path))
+    ds = ds.shuffle(buffer_size=shuffle_buffer, seed=42)
+    ds = ds.skip(skip)
     ds = ds.map(parse_json_fn)
     ds = ds.apply(tf.data.experimental.bucket_by_sequence_length(lambda x: tf.shape(x),
                                                                  boundaries,
                                                                  batch_sizes, padded_shapes=[None]))
-    ds = ds.shuffle(buffer_size=shuffle_buffer, seed=42)
     ds = ds.repeat()
-    ds = ds.skip(skip)
     ds = ds.prefetch(100)
 
     return ds
@@ -136,7 +136,7 @@ def main(argv):
 
     # Training dataset
     ds = get_dataset(Path(flags.FLAGS.data), hp.get("max_tokens"), hp.get("max_seq_len"), hp.get("shuffle_buffer"),
-                     skip=global_step.numpy())
+                     skip=num_examples_processed.numpy())
 
     try:
         train_loop(ds, transformer_decoder, global_step, num_examples_processed, ckpt_manager, optimizer,
