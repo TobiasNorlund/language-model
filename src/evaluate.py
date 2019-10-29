@@ -18,10 +18,10 @@ def get_dataset(dataset_path: Path, batch_size: int, take: int=None, shuffle_buf
 
     ds = tf.data.TextLineDataset(str(dataset_path))
     ds = ds.map(parse_json_fn)
-    ds = ds.padded_batch(batch_size, padded_shapes=(-1,))
     if take is not None:
         ds = ds.shuffle(shuffle_buffer, seed=42)
         ds = ds.take(take)
+    ds = ds.padded_batch(batch_size, padded_shapes=(-1,))
     ds = ds.prefetch(100)
 
     return ds
