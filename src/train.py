@@ -23,8 +23,8 @@ def get_dataset(dataset_path: Path, max_tokens: int, max_seq_len: int, shuffle_b
     def parse_json_fn(text):
         return tf.py_function(parse_json, inp=[text], Tout=tf.int64)
 
-    boundaries = [i for i in range(1, max_seq_len + 1) if max_tokens % i == 0]
-    batch_sizes = [int(max_tokens / i) for i in range(1, max_seq_len + 1) if max_tokens % i == 0] + [1]
+    boundaries = np.arange(1, max_seq_len)
+    batch_sizes = [int(max_tokens / i) for i in np.arange(1, max_seq_len + 1)]
 
     ds = tf.data.TextLineDataset(str(dataset_path))
     ds = ds.shuffle(buffer_size=shuffle_buffer, seed=42)
