@@ -18,7 +18,7 @@ build-gpu:
 
 build: build-cpu build-gpu
 
-# -- RUN --------------------------
+# --- RUN --------------------------
 
 .PHONY: run-cpu
 run-cpu:
