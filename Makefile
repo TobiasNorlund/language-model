@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := build
 
-DOCKER_IMAGE_BASE_NAME:=tobias/language-model
+DOCKER_IMAGE_BASE_NAME:=tobias/$(shell hostname)/language-model
 
 GPU_TAG := 2.0.0-gpu-py3
 CPU_TAG := 2.0.0-py3
