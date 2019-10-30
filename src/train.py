@@ -1,4 +1,5 @@
 import tensorflow as tf
+tf.config.experimental.set_memory_growth(tf.config.experimental.list_physical_devices('GPU')[0], True)
 import numpy as np
 import time
 import json
@@ -11,11 +12,13 @@ from absl import app, flags
 
 # Training hparams
 hp.add("shuffle_buffer", 1, help="Shuffle buffer")
+hp.add("batch_size", 100, help="batch_size")
+hp.add("dynamic_batching", False, help="Whether to use dynamic batching")
 hp.add("max_tokens", 100, help="Max tokens")
 hp.add("max_seq_len", 600, help="Max sequence len")
 
 
-def get_dataset(dataset_path: Path, max_tokens: int, max_seq_len: int, shuffle_buffer: int, skip: int = 0):
+def get_dataset_dynamic(dataset_path: Path, max_tokens: int, max_seq_len: int, shuffle_buffer: int, skip: int = 0):
     def parse_json(json_string_tensor):
         encoded = json.loads(json_string_tensor.numpy())["encoded"]
         return tf.constant(encoded, dtype=tf.int64, shape=[len(encoded)])
@@ -34,6 +37,25 @@ def get_dataset(dataset_path: Path, max_tokens: int, max_seq_len: int, shuffle_b
     ds = ds.apply(tf.data.experimental.bucket_by_sequence_length(lambda x: tf.shape(x),
                                                                  boundaries,
                                                                  batch_sizes, padded_shapes=[None]))
+    ds = ds.prefetch(100)
+
+    return ds
+
+
+def get_dataset_static(dataset_path: Path, batch_size: int, shuffle_buffer: int, skip: int = 0):
+    def parse_json(json_string_tensor):
+        encoded = json.loads(json_string_tensor.numpy())["encoded"]
+        return tf.constant(encoded, dtype=tf.int64, shape=[len(encoded)])
+
+    def parse_json_fn(text):
+        return tf.py_function(parse_json, inp=[text], Tout=tf.int64)
+
+    ds = tf.data.TextLineDataset(str(dataset_path))
+    ds = ds.shuffle(buffer_size=shuffle_buffer, seed=42)
+    ds = ds.repeat()
+    ds = ds.skip(skip)
+    ds = ds.map(parse_json_fn)
+    ds = ds.padded_batch(batch_size, padded_shapes=[None])
     ds = ds.prefetch(100)
 
     return ds
@@ -86,6 +108,9 @@ def train_loop(ds, transformer_decoder, global_step, num_examples_processed, ckp
         num_examples_processed.assign_add(tf.cast(tf.shape(batch)[0], num_examples_processed.dtype))
         tf.summary.experimental.set_step(global_step)
 
+        # temp
+        print(batch.shape)
+
         # Take a gradient step
         loss = train_step(batch)
 
@@ -135,8 +160,12 @@ def main(argv):
     train_summary_writer = tf.summary.create_file_writer(train_log_dir)
 
     # Training dataset
-    ds = get_dataset(Path(flags.FLAGS.data), hp.get("max_tokens"), hp.get("max_seq_len"), hp.get("shuffle_buffer"),
-                     skip=num_examples_processed.numpy())
+    if hp.get("dynamic_batching") is True:
+        ds = get_dataset_dynamic(Path(flags.FLAGS.data), hp.get("max_tokens"), hp.get("max_seq_len"),
+                                 hp.get("shuffle_buffer"), skip=num_examples_processed.numpy())
+    else:
+        ds = get_dataset_static(Path(flags.FLAGS.data), hp.get("batch_size"), hp.get("shuffle_buffer"),
+                                skip=num_examples_processed.numpy())
 
     try:
         train_loop(ds, transformer_decoder, global_step, num_examples_processed, ckpt_manager, optimizer,
