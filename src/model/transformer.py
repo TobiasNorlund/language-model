@@ -200,15 +200,15 @@ class DecoderLayer(tf.keras.layers.Layer):
 
     def call(self, x, enc_output, training, look_ahead_mask, padding_mask):
         # enc_output.shape == (batch_size, input_seq_len, d_model)
-        tf.summary.scalar("input_variance", tf.math.reduce_variance(x))
+        # tf.summary.scalar("input_variance", tf.math.reduce_variance(x))
 
         x = self.layernorm1(x)
         attn1, attn_weights_block1 = self.mha1(x, x, x, look_ahead_mask)  # (batch_size, target_seq_len, d_model)
-        tf.summary.histogram("mha", attn1)
+        # tf.summary.histogram("mha", attn1)
 
         attn1 = self.dropout1(attn1, training=training)
         out1 = self.layernorm2(attn1 + x)
-        tf.summary.histogram("mha_normed", out1)
+        # tf.summary.histogram("mha_normed", out1)
 
         # if enc_output is not None:
         #    attn2, attn_weights_block2 = self.mha2(
@@ -220,11 +220,11 @@ class DecoderLayer(tf.keras.layers.Layer):
         #    out2 = out1  # self.layernorm2(out1)  # (batch_size, target_seq_len, d_model)
 
         ffn_output = self.ffn(out1)  # (batch_size, target_seq_len, d_model)
-        tf.summary.histogram("ffn", ffn_output)
+        # tf.summary.histogram("ffn", ffn_output)
 
         ffn_output = self.dropout3(ffn_output, training=training)
         # out3 = self.layernorm3(ffn_output + out1)  # (batch_size, target_seq_len, d_model)
-        tf.summary.histogram("out", ffn_output)
+        # tf.summary.histogram("out", ffn_output)
 
         return ffn_output, attn_weights_block1, attn_weights_block2
 
@@ -282,12 +282,12 @@ class Decoder(tf.keras.layers.Layer):
         attention_weights = {}
 
         x = self.embedding(x)  # (batch_size, target_seq_len, d_model)
-        tf.summary.scalar("embedding_variance", tf.math.reduce_variance(x))
+        # tf.summary.scalar("embedding_variance", tf.math.reduce_variance(x))
         # tf.summary.histogram("embeddings", x)
 
         # Scale embeddings so that variance = 1.0 (at start)
         x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
-        tf.summary.scalar("scaled_embedding_variance", tf.math.reduce_variance(x))
+        # tf.summary.scalar("scaled_embedding_variance", tf.math.reduce_variance(x))
 
         x += self.pos_encoding[:, :seq_len, :]
         x = self.dropout(x, training=training)
@@ -296,8 +296,8 @@ class Decoder(tf.keras.layers.Layer):
             x, block1, block2 = self.dec_layers[i](x, enc_output, training,
                                                    look_ahead_mask, padding_mask)
 
-            attention_weights['decoder_layer{}_block1'.format(i + 1)] = block1
-            attention_weights['decoder_layer{}_block2'.format(i + 1)] = block2
+            #attention_weights['decoder_layer{}_block1'.format(i + 1)] = block1
+            #attention_weights['decoder_layer{}_block2'.format(i + 1)] = block2
 
         x = self.layernorm(x)
 
@@ -355,7 +355,7 @@ class TransformerOnlyDecoder(tf.keras.Model):
         # Final projection to vocabulary => logits, logits should have variance ~1.0 at start
         final_output = tf.matmul(dec_output, self.decoder.embedding.embeddings, transpose_b=True)
         # final_output += self.logits_bias
-        tf.summary.histogram("logits", final_output)
+        # tf.summary.histogram("logits", final_output)
         # tf.summary.histogram("logits_bias_weights", self.logits_bias.value())
 
         return final_output, attention_weights

@@ -1,5 +1,11 @@
 import tensorflow as tf
-tf.config.experimental.set_memory_growth(tf.config.experimental.list_physical_devices('GPU')[0], True)
+from tensorflow.python.eager.profiler import start_profiler_server
+start_profiler_server(6009)
+num_gpus = len(tf.config.experimental.list_physical_devices('GPU'))
+print("Num GPUs Available: ", num_gpus)
+#if num_gpus > 0:
+#    for gpu_device in tf.config.experimental.list_physical_devices('GPU'):
+#        tf.config.experimental.set_memory_growth(gpu_device, True)
 import numpy as np
 import time
 import json
@@ -13,12 +19,13 @@ from absl import app, flags
 # Training hparams
 hp.add("shuffle_buffer", 1, help="Shuffle buffer")
 hp.add("batch_size", 100, help="batch_size")
+hp.add("padding_length", 110, help="")
 hp.add("dynamic_batching", False, help="Whether to use dynamic batching")
 hp.add("max_tokens", 100, help="Max tokens")
 hp.add("max_seq_len", 600, help="Max sequence len")
 
 
-def get_dataset_dynamic(dataset_path: Path, max_tokens: int, max_seq_len: int, shuffle_buffer: int, skip: int = 0):
+def get_dataset_dynamic(dataset_path: Path, shuffle_buffer: int, skip: int = 0):
     def parse_json(json_string_tensor):
         encoded = json.loads(json_string_tensor.numpy())["encoded"]
         return tf.constant(encoded, dtype=tf.int64, shape=[len(encoded)])
@@ -26,8 +33,12 @@ def get_dataset_dynamic(dataset_path: Path, max_tokens: int, max_seq_len: int, s
     def parse_json_fn(text):
         return tf.py_function(parse_json, inp=[text], Tout=tf.int64)
 
-    boundaries = np.arange(1, max_seq_len)
-    batch_sizes = [int(max_tokens / i) for i in np.arange(1, max_seq_len + 1)]
+    #boundaries = np.arange(1, max_seq_len)
+    #batch_sizes = [int(max_tokens / i) for i in np.arange(1, max_seq_len + 1)]
+
+    # TODO: Manually optimized for schibsted-all on two GTX 1080
+    boundaries = [30, 115, 120, 130, 140, 160, 180, 200, 240, 280, 350, 400, 500, 600]
+    batch_sizes = [60, 40, 38, 36, 34, 32, 30, 28, 24, 20, 28, 16, 12, 10, 10]
 
     ds = tf.data.TextLineDataset(str(dataset_path))
     ds = ds.shuffle(buffer_size=shuffle_buffer, seed=42)
@@ -36,8 +47,10 @@ def get_dataset_dynamic(dataset_path: Path, max_tokens: int, max_seq_len: int, s
     ds = ds.map(parse_json_fn)
     ds = ds.apply(tf.data.experimental.bucket_by_sequence_length(lambda x: tf.shape(x),
                                                                  boundaries,
-                                                                 batch_sizes, padded_shapes=[None]))
-    ds = ds.prefetch(100)
+                                                                 batch_sizes,
+                                                                 padded_shapes=[None],
+                                                                 pad_to_bucket_boundary=True))
+    ds = ds.prefetch(2)
 
     return ds
 
@@ -56,60 +69,81 @@ def get_dataset_static(dataset_path: Path, batch_size: int, shuffle_buffer: int,
     ds = ds.skip(skip)
     ds = ds.map(parse_json_fn)
     ds = ds.padded_batch(batch_size, padded_shapes=[None])
-    ds = ds.prefetch(100)
+    ds = ds.prefetch(2)
 
     return ds
 
 
 def train_loop(ds, transformer_decoder, global_step, num_examples_processed, ckpt_manager, optimizer, learning_rate,
-               train_summary_writer, checkpoint_every, summarize_every, continuous=True):
+               dist_strategy, checkpoint_every, summarize_every, continuous=True):
     loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction='none')
-    train_step_signature = [tf.TensorSpec(shape=(None, None), dtype=tf.int64)]
+    # train_step_signature = [tf.TensorSpec(shape=(None, None), dtype=tf.int64)] - Not working with tf.distribute
 
-    def calculate_loss(real, pred):
+    def calculate_loss(real, pred, batch_tokens):
         # Masks padded tokens from loss_object
         mask = tf.math.logical_not(tf.math.equal(real, 0))
         loss_ = loss_object(real, pred)
 
-        return tf.reduce_mean(tf.boolean_mask(loss_, mask))
+        return tf.reduce_sum(tf.boolean_mask(loss_, mask) / tf.cast(batch_tokens, tf.float32), keepdims=True)
 
-    @tf.function(input_signature=train_step_signature, experimental_relax_shapes=True)
-    def train_step(batch):
-        tar_inp = batch[:, :-1]
-        tar_real = batch[:, 1:]
+    @tf.function(experimental_relax_shapes=True)
+    def train_step(dist_batch):
 
-        mask = transformer.create_masks(tar_inp)
+        num_batch_tokens = dist_strategy.reduce(tf.distribute.ReduceOp.SUM,
+                                       dist_strategy.experimental_run_v2(
+                                           lambda x: tf.reduce_sum(
+                                               tf.cast(tf.math.logical_not(tf.math.equal(x, 0)), tf.int64),
+                                               keepdims=True),
+                                           args=(dist_batch,)),
+                                       axis=0)
 
-        with train_summary_writer.as_default():
-            with tf.summary.record_if(tf.math.equal(tf.math.mod(global_step, summarize_every), 0)):
+        def _per_replica_step(batch):
+            tar_inp = batch[:, :-1]
+            tar_real = batch[:, 1:]
+
+            mask = transformer.create_masks(tar_inp)
+            should_summarize = tf.math.equal(tf.math.mod(global_step, summarize_every), 0)
+
+            with tf.summary.record_if(should_summarize):
                 with tf.GradientTape() as tape:
                     predictions, _ = transformer_decoder(tar_inp, True, mask)
-                    loss = calculate_loss(tar_real, predictions)
+                    loss = calculate_loss(tar_real, predictions, num_batch_tokens)
 
                 vars = transformer_decoder.trainable_variables
                 gradients = tape.gradient(loss, vars)
-                optimizer.apply_gradients(zip(gradients, transformer_decoder.trainable_variables))
+                optimizer.apply_gradients(zip(gradients, vars))
+                num_examples_processed.assign_add(tf.cast(tf.shape(batch)[0], num_examples_processed.dtype))
 
-                for i in range(len(vars)):
-                    tf.summary.scalar("gradient/" + vars[i].name, tf.linalg.norm(gradients[i]))
-                    tf.summary.scalar("variable/" + vars[i].name, tf.linalg.norm(vars[i]))
+                # Summarize individual vars and gradients
+                #if should_summarize:
+                #    for i in range(len(vars)):
+                #        tf.summary.scalar("variable/" + vars[i].name, tf.linalg.norm(vars[i]))
+                #        tf.summary.scalar("gradient/" + vars[i].name, tf.linalg.norm(gradients[i]))
 
-            tf.summary.scalar("loss", loss)
-            tf.summary.scalar("gradient_norm", tf.linalg.global_norm(gradients))
-            tf.summary.scalar("learning_rate",
-                              learning_rate if type(learning_rate) is float else learning_rate(global_step))
+            gradient_norm = tf.linalg.global_norm(gradients)[tf.newaxis]
 
-        return loss
+            return loss , gradient_norm
+
+        per_replica_losses, per_replica_grad_norms = \
+            dist_strategy.experimental_run_v2(_per_replica_step, args=(dist_batch,))
+
+        # Approximate global gradient norm by mean over replica grad norms
+        mean_grad_norm = dist_strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_grad_norms, axis=0) / \
+                         dist_strategy.num_replicas_in_sync
+        total_loss = dist_strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=0)
+
+        tf.summary.scalar("loss", total_loss)
+        tf.summary.scalar("gradient_norm", mean_grad_norm)
+        tf.summary.scalar("learning_rate",
+                         learning_rate if type(learning_rate) is float else learning_rate(global_step))
+
+        return total_loss
 
     steps_start = time.time()
 
     for batch in ds:
         global_step.assign_add(1)
-        num_examples_processed.assign_add(tf.cast(tf.shape(batch)[0], num_examples_processed.dtype))
         tf.summary.experimental.set_step(global_step)
-
-        # temp
-        print(batch.shape)
 
         # Take a gradient step
         loss = train_step(batch)
@@ -119,10 +153,10 @@ def train_loop(ds, transformer_decoder, global_step, num_examples_processed, ckp
                 np.sum([np.prod(v.get_shape().as_list()) for v in transformer_decoder.trainable_variables])))
 
         # Print intermediate metrics
-        if global_step.numpy() % 100 == 0:
-            print('Step: {}\tLoss: {:.4f}\tNum examples: {}\tTime: {:.3f}s'.format(
-                global_step.numpy(), loss, num_examples_processed.numpy(), time.time() - steps_start))
-            steps_start = time.time()
+        if global_step.numpy() % 1 == 0:
+           print('Step: {}\tLoss: {:.4f}\tNum examples: {}\tTime: {:.3f}s'.format(
+               global_step.numpy(), loss, num_examples_processed.numpy(), time.time() - steps_start))
+           steps_start = time.time()
 
         # Checkpoint every X step
         if global_step.numpy() % checkpoint_every == 0:
@@ -136,43 +170,50 @@ def train_loop(ds, transformer_decoder, global_step, num_examples_processed, ckp
 def main(argv):
     vocab_size = get_vocab(Path(flags.FLAGS.vocab)).vocab_size
 
-    # Model
-    transformer_decoder = transformer.TransformerOnlyDecoder(vocab_size)
+    dist_strategy = tf.distribute.MirroredStrategy()
+    with dist_strategy.scope():
 
-    # Optimizer
-    optimizer, learning_rate = get_optimizer()
+        # Model
+        transformer_decoder = transformer.TransformerOnlyDecoder(vocab_size)
 
-    # Counters
-    global_step = tf.Variable(0, name="global_step", trainable=False, dtype=tf.int64)
-    num_examples_processed = tf.Variable(0, name="num_examples_processed", trainable=False, dtype=tf.int64)
+        # Optimizer
+        optimizer, learning_rate = get_optimizer()
 
-    # Checkpointing
-    checkpoint_path = Path(flags.FLAGS.checkpoint_path)
-    ckpt = tf.train.Checkpoint(transformer_decoder=transformer_decoder, optimizer=optimizer,
-                               global_step=global_step, num_examples_processed=num_examples_processed)
-    ckpt_manager = tf.train.CheckpointManager(ckpt, str(checkpoint_path), max_to_keep=5)
-    if ckpt_manager.latest_checkpoint:
-        ckpt.restore(ckpt_manager.latest_checkpoint)
-        print("Restored checkpoint from: {}".format(ckpt_manager.latest_checkpoint))
+        # Counters
+        global_step = tf.Variable(0, name="global_step", trainable=False, dtype=tf.int64)
+        num_examples_processed = tf.Variable(0, name="num_examples_processed", trainable=False, dtype=tf.int64,
+                                             aggregation=tf.VariableAggregation.SUM)
 
-    # Tensorboard events
-    train_log_dir = str(checkpoint_path / "events")
-    train_summary_writer = tf.summary.create_file_writer(train_log_dir)
+        # Checkpointing
+        checkpoint_path = Path(flags.FLAGS.checkpoint_path)
+        ckpt = tf.train.Checkpoint(transformer_decoder=transformer_decoder, optimizer=optimizer,
+                                   global_step=global_step, num_examples_processed=num_examples_processed)
+        ckpt_manager = tf.train.CheckpointManager(ckpt, str(checkpoint_path), max_to_keep=5)
+        if ckpt_manager.latest_checkpoint:
+            ckpt.restore(ckpt_manager.latest_checkpoint)
+            print("Restored checkpoint from: {}".format(ckpt_manager.latest_checkpoint))
 
-    # Training dataset
-    if hp.get("dynamic_batching") is True:
-        ds = get_dataset_dynamic(Path(flags.FLAGS.data), hp.get("max_tokens"), hp.get("max_seq_len"),
-                                 hp.get("shuffle_buffer"), skip=num_examples_processed.numpy())
-    else:
-        ds = get_dataset_static(Path(flags.FLAGS.data), hp.get("batch_size"), hp.get("shuffle_buffer"),
-                                skip=num_examples_processed.numpy())
+        # Tensorboard events
+        train_log_dir = str(checkpoint_path / "events")
+        train_summary_writer = tf.summary.create_file_writer(train_log_dir)
 
-    try:
-        train_loop(ds, transformer_decoder, global_step, num_examples_processed, ckpt_manager, optimizer,
-                   learning_rate, train_summary_writer, flags.FLAGS.checkpoint_every, flags.FLAGS.summarize_every,
-                   flags.FLAGS.continuous)
-    except KeyboardInterrupt:
-        pass
+        # Training dataset
+        if hp.get("dynamic_batching") is True:
+            ds = get_dataset_dynamic(Path(flags.FLAGS.data), hp.get("shuffle_buffer"),
+                                     skip=num_examples_processed.numpy())
+        else:
+            ds = get_dataset_static(Path(flags.FLAGS.data), hp.get("batch_size"), hp.get("shuffle_buffer"),
+                                    skip=num_examples_processed.numpy())
+
+        ds = dist_strategy.experimental_distribute_dataset(ds)
+
+        try:
+            with train_summary_writer.as_default():
+                train_loop(ds, transformer_decoder, global_step, num_examples_processed, ckpt_manager, optimizer,
+                           learning_rate, dist_strategy, flags.FLAGS.checkpoint_every,
+                           flags.FLAGS.summarize_every, flags.FLAGS.continuous)
+        except KeyboardInterrupt:
+            pass
 
 
 if __name__ == "__main__":
