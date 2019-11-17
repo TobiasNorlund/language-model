@@ -17,12 +17,12 @@ def get_dataset(dataset_path: Path, batch_size: int, take: int=None, shuffle_buf
         return tf.py_function(parse_json, inp=[text], Tout=tf.int64)
 
     ds = tf.data.TextLineDataset(str(dataset_path))
-    ds = ds.map(parse_json_fn)
     if take is not None:
         ds = ds.shuffle(shuffle_buffer, seed=42)
         ds = ds.take(take)
+    ds = ds.map(parse_json_fn)
     ds = ds.padded_batch(batch_size, padded_shapes=(-1,))
-    ds = ds.prefetch(100)
+    ds = ds.prefetch(2)
 
     return ds
 
@@ -50,7 +50,7 @@ def evaluate(vocab_path: Path, checkpoint_path: Path, dataset_path: Path, batch_
     ckpt = tf.train.Checkpoint(transformer_decoder=transformer_decoder, global_step=global_step)
     ckpt_manager = tf.train.CheckpointManager(ckpt, str(checkpoint_path), max_to_keep=5)
     if ckpt_manager.latest_checkpoint:
-        ckpt.restore(ckpt_manager.latest_checkpoint)
+        ckpt.restore(ckpt_manager.latest_checkpoint).expect_partial()
         print("Restored checkpoint from: {}".format(ckpt_manager.latest_checkpoint))
     else:
         raise RuntimeError("Couldn't load from checkpoint")
