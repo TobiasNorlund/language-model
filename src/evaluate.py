@@ -8,7 +8,7 @@ from pathlib import Path
 from decode import decode_encoded, RandomSamplingStrategy, TopKSamplingStrategy
 
 
-def get_dataset(dataset_path: Path, batch_size: int, take: int=None, shuffle_buffer: int=1000):
+def get_dataset(dataset_path: Path, batch_size: int, take: int=None, shuffle_buffer: int = 1000):
 
     def parse_json(json_string_tensor):
         return tf.constant(json.loads(json_string_tensor.numpy())["encoded"], dtype=tf.int64)
@@ -97,7 +97,7 @@ def evaluate(vocab_path: Path, checkpoint_path: Path, dataset_path: Path, batch_
                                         TopKSamplingStrategy(5))))
 
     # Tensorboard events
-    eval_log_dir = str(checkpoint_path / (dataset_path.stem + "_eval"))
+    eval_log_dir = str(checkpoint_path / (dataset_path.name.split(".")[0] + "_eval"))
     eval_summary_writer = tf.summary.create_file_writer(eval_log_dir)
 
     with eval_summary_writer.as_default():
