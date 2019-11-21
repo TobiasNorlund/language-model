@@ -1,7 +1,9 @@
 import tensorflow as tf
 import numpy as np
 from preprocess import get_vocab, Vocabulary
+from model import transformer
 from pathlib import Path
+from optimizer import get_optimizer
 from absl import flags, app
 import hparams as hp
 
@@ -83,11 +85,71 @@ def main(argv):
                            min_span_len=hp.get("min_span_len"),
                            max_span_len=hp.get("max_span_len"))
 
+    # Model
+    transformer_decoder = transformer.TransformerOnlyDecoder(vocab.vocab_size)
+
+    # Optimizer
+    optimizer, learning_rate = get_optimizer()
+
+    # Counters
+    global_step = tf.Variable(0, name="global_step", trainable=False, dtype=tf.int64)
+
+    # Checkpointing
+    checkpoint_path = Path(flags.FLAGS.checkpoint_path)
+    ckpt = tf.train.Checkpoint(transformer_decoder=transformer_decoder, optimizer=optimizer,
+                               global_step=global_step)
+    ckpt_manager = tf.train.CheckpointManager(ckpt, str(checkpoint_path), max_to_keep=5)
+    if ckpt_manager.latest_checkpoint:
+        ckpt.restore(ckpt_manager.latest_checkpoint)
+        print("Restored checkpoint from: {}".format(ckpt_manager.latest_checkpoint))
+
+    loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction='none')
+
+    def calculate_loss(gt, pred):
+        # gt: [batch, len]
+        # pred: [batch, len, vocab_size]
+        loss = loss_object(gt, pred) # [batch, len]
+
+        # Mask: 1. Paddings & "input"
+        padding_mask = tf.math.logical_not(tf.math.equal(gt, 0))
+
+        lengths = tf.where(tf.equal(gt, vocab.start_idx))[:, 1] + 1
+        mask = tf.sequence_mask(lengths, tf.shape(gt)[1])
+        input_mask = tf.logical_not(mask)
+
+        final_mask = tf.logical_and(padding_mask, input_mask)
+
+        return tf.reduce_mean(tf.boolean_mask(loss, final_mask))
+
+    # @tf.function
+    def train_step(batch):
+        batch_input = batch[:, :-1]
+        batch_target = batch[:, 1:]
+
+        mask = transformer.create_masks(batch_input, vocab.start_idx)
+
+        with tf.GradientTape() as tape:
+            logits, _ = transformer_decoder(batch_input, training=True, look_ahead_mask=mask)  #  TODO: Prefix lm mask
+            loss = calculate_loss(batch_target, logits)
+
+        gradients = tape.gradient(loss, transformer_decoder.trainable_variables)
+        optimizer.apply_gradients(zip(gradients, transformer_decoder.trainable_variables))
+
+        return loss
+
+    for batch in train_ds:
+        global_step.assign_add(1)
+
+        loss = train_step(batch)
+
+        print(loss)
+
 
 if __name__ == "__main__":
     flags.DEFINE_string("data", None, help="Training data file")
     flags.DEFINE_string("vocab", None, help="Vocab file")
-    flags.mark_flags_as_required(["data", "vocab"])
+    flags.DEFINE_string("checkpoint_path", None, help="Checkpoint path")
+    flags.mark_flags_as_required(["data", "vocab", "checkpoint_path"])
 
     num_gpus = len(tf.config.experimental.list_physical_devices('GPU'))
     print("Num GPUs Available: ", num_gpus)
