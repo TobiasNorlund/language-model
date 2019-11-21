@@ -30,7 +30,6 @@ def get_dataset_dynamic(dataset_path: Path, shuffle_buffer: int, skip: int = 0):
     #boundaries = np.arange(1, max_seq_len)
     #batch_sizes = [int(max_tokens / i) for i in np.arange(1, max_seq_len + 1)]
 
-    # TODO: Manually optimized for schibsted-all on two GTX 1080
     boundaries = [30, 115, 120, 130, 140, 160, 180, 200, 240, 280, 350, 400, 500, 601]
     batch_sizes = [60, 40, 38, 36, 34, 32, 30, 28, 24, 20, 18, 16, 12, 10, 10]
 
@@ -211,7 +210,7 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    flags.DEFINE_string("data", None, help="Training data tfrecord file")
+    flags.DEFINE_string("data", None, help="Training data file")
     flags.DEFINE_string("vocab", None, help="Vocab file")
     flags.DEFINE_string("checkpoint_path", None, help="Checkpoint path")
     flags.DEFINE_integer("checkpoint_every", 1000, help="Checkpoint every X step")
