@@ -1,11 +1,5 @@
 import tensorflow as tf
 from tensorflow.python.eager.profiler import start_profiler_server
-start_profiler_server(6009)
-num_gpus = len(tf.config.experimental.list_physical_devices('GPU'))
-print("Num GPUs Available: ", num_gpus)
-#if num_gpus > 0:
-#    for gpu_device in tf.config.experimental.list_physical_devices('GPU'):
-#        tf.config.experimental.set_memory_growth(gpu_device, True)
 import numpy as np
 import time
 import json
@@ -224,5 +218,9 @@ if __name__ == "__main__":
     flags.DEFINE_boolean("continuous", True, help="Whether to continue training after checkpointing")
     flags.DEFINE_integer("summarize_every", 50, help="Summarize model stats every X step")
     flags.mark_flags_as_required(["data", "vocab", "checkpoint_path"])
+
+    num_gpus = len(tf.config.experimental.list_physical_devices('GPU'))
+    print("Num GPUs Available: ", num_gpus)
+    start_profiler_server(6009)
 
     app.run(main)
