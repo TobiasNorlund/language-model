@@ -57,7 +57,7 @@ def create_masks(tar, start_idx):
 
     lengths = tf.where(tf.equal(tar, start_idx))[:, 1] + 1
     input_mask = tf.sequence_mask(lengths, tf.shape(tar)[1])
-    look_ahead_mask *= 1.0 - tf.cast(input_mask, tf.float32)
+    look_ahead_mask *= (1.0 - tf.cast(input_mask, tf.float32))[:, tf.newaxis, tf.newaxis, :]
 
     combined_mask = tf.maximum(dec_target_padding_mask, look_ahead_mask)
 
