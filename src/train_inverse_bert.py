@@ -5,21 +5,18 @@ from model import transformer
 from pathlib import Path
 from optimizer import get_optimizer
 from absl import flags, app
+import spacy
 import hparams as hp
 
 # Training hparams
 hp.add("shuffle_buffer", 1, help="Shuffle buffer")
 hp.add("batch_size", 100, help="batch_size")
-hp.add("min_num_spans", 1, help="Minimum number of spans per paragraph")
-hp.add("max_num_spans", 4, help="Maximum number of spans per paragraph")
-hp.add("min_span_len", 1, help="Minimum length of spans")
-hp.add("max_span_len", 5, help="Minimum length of spans")
 
 SEPARATOR_TOKEN = "~"
 
 
-def get_dataset(dataset_path: Path, vocab: Vocabulary, batch_size: int, shuffle_buffer: int, skip: int = 0,
-                min_num_spans=1, max_num_spans=4, min_span_len=1, max_span_len=5):
+def get_dataset(dataset_path: Path, vocab: Vocabulary, batch_size: int, shuffle_buffer: int, spacy_model,
+                skip: int = 0):
 
     def split_article(article_string_tensor):
         paragraphs = article_string_tensor.numpy().decode().split("<p>")
@@ -27,8 +24,7 @@ def get_dataset(dataset_path: Path, vocab: Vocabulary, batch_size: int, shuffle_
 
     def encode_with_spanned_prefix(paragraph_string_tensor):
         """
-        Takes a string tensor, splits it up by paragraphs and randomizes non overlapping spans of the text to use for
-        conditioning a generative language model.
+        Uses spacy to find noun chunks to prefix the text on
 
         Example original text:
         "Den infekterade striden om hur polisen i Norrbotten skött sitt jobb när det gäller sexhandeln har nu nått
@@ -41,23 +37,15 @@ def get_dataset(dataset_path: Path, vocab: Vocabulary, batch_size: int, shuffle_
          anställd. <END>"
         ]
         """
-        encoded_paragraph = vocab.encode(paragraph_string_tensor.numpy(),
-                                         include_start_token=False, include_end_token=False)
-
-        while True:
-            num_spans = np.random.randint(min_num_spans, max_num_spans)
-            span_lengths = np.random.randint(min_span_len, max_span_len, num_spans)
-            span_start = np.sort(np.random.choice(len(encoded_paragraph) - min_span_len - 1, num_spans))
-            # Ensure non-overlapping and not overflow
-            if all(span_start[1:] > (span_start + span_lengths)[:-1]) and \
-                    all((span_start + span_lengths) < len(encoded_paragraph)):
-                break
-
+        paragraph = paragraph_string_tensor.numpy().decode()
+        spacy_paragraph = spacy_model(paragraph)
         encoded = []
         separator_encoding = vocab.encode(SEPARATOR_TOKEN)
-        for i in range(num_spans):
-            encoded += separator_encoding + encoded_paragraph[span_start[i]: span_start[i] + span_lengths[i]]
-        encoded += [vocab.start_idx] + encoded_paragraph + [vocab.end_idx]
+        for noun_chunk in spacy_paragraph.noun_chunks:
+            if len(noun_chunk.text) < 50:
+                encoded += separator_encoding + vocab.encode(noun_chunk.text, include_start_token=False,
+                                                             include_end_token=False)
+        encoded += vocab.encode(paragraph, include_start_token=True, include_end_token=True)
 
         return tf.constant(encoded, dtype=tf.int64, shape=[len(encoded)])
 
@@ -78,12 +66,12 @@ def get_dataset(dataset_path: Path, vocab: Vocabulary, batch_size: int, shuffle_
 
 def main(argv):
 
+    # Spacy
+    spacy_model = spacy.load(flags.FLAGS.spacy_model)
+
     vocab = get_vocab(Path(flags.FLAGS.vocab))
     train_ds = get_dataset(Path(flags.FLAGS.data), vocab, hp.get("batch_size"), hp.get("shuffle_buffer"),
-                           min_num_spans=hp.get("min_num_spans"),
-                           max_num_spans=hp.get("max_num_spans"),
-                           min_span_len=hp.get("min_span_len"),
-                           max_span_len=hp.get("max_span_len"))
+                           spacy_model=spacy_model)
 
     # Model
     transformer_decoder = transformer.TransformerOnlyDecoder(vocab.vocab_size)
@@ -149,7 +137,8 @@ if __name__ == "__main__":
     flags.DEFINE_string("data", None, help="Training data file")
     flags.DEFINE_string("vocab", None, help="Vocab file")
     flags.DEFINE_string("checkpoint_path", None, help="Checkpoint path")
-    flags.mark_flags_as_required(["data", "vocab", "checkpoint_path"])
+    flags.DEFINE_string("spacy_model", None, help="Spacy model dir")
+    flags.mark_flags_as_required(["data", "vocab", "checkpoint_path", "spacy_model"])
 
     num_gpus = len(tf.config.experimental.list_physical_devices('GPU'))
     print("Num GPUs Available: ", num_gpus)

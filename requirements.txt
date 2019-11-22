@@ -4,3 +4,4 @@ tensorboard==2.0.0
 jupyter==1.0.0
 jupyter_contrib_nbextensions==0.5.1
 jupyter_nbextensions_configurator==0.4.1
+spacy
