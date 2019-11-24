@@ -50,10 +50,11 @@ def decode_encoded(seed_encoded, model, end_token_idx, strategy, max_len=100):
 
     for i in range(max_len):
         seed_tensor = tf.convert_to_tensor(seed_encoded)[tf.newaxis, :]
+        seed_pos = tf.range(tf.shape(seed_tensor)[1])[tf.newaxis, :]
         mask = transformer.create_look_ahead_mask(tf.shape(seed_tensor)[1])
 
         # Get logits for next token
-        logits, _ = model(seed_tensor, training=False, look_ahead_mask=mask)
+        logits, _ = model(seed_tensor, seed_pos, training=False, attention_mask=mask)
         logits = logits[:, -1, :]
 
         new_token = strategy.select(logits)
@@ -123,7 +124,7 @@ if __name__ == "__main__":
     flags.DEFINE_float("temperature", 1.0, help="Sampling temperature")
     flags.DEFINE_integer("k", 5, help="Top k to resample from")
 
-    flags.mark_flags_as_required(["checkpoint_path", "vocab", "strategy"])
+    flags.mark_flags_as_required(["checkpoint_path", "vocab"])
 
     FLAGS = flags.FLAGS
 

@@ -21,17 +21,11 @@ def positional_encoding(position, d_model):
     angle_rads = get_angles(np.arange(position)[:, np.newaxis],
                             np.arange(d_model)[np.newaxis, :],
                             d_model)
-
     # apply sin to even indices in the array; 2i
     sines = np.sin(angle_rads[:, 0::2])
-
     # apply cos to odd indices in the array; 2i+1
     cosines = np.cos(angle_rads[:, 1::2])
-
     pos_encoding = np.concatenate([sines, cosines], axis=-1)
-
-    pos_encoding = pos_encoding[np.newaxis, ...]
-
     return tf.cast(pos_encoding, dtype=tf.float32)
 
 
@@ -48,15 +42,26 @@ def create_look_ahead_mask(size):
     return mask  # (seq_len, seq_len)
 
 
-def create_masks(tar):
-    # Used in the 1st attention block in the decoder.
-    # It is used to pad and mask future tokens in the input received by
-    # the decoder.
-    look_ahead_mask = create_look_ahead_mask(tf.shape(tar)[1])
-    dec_target_padding_mask = create_padding_mask(tar)
-    combined_mask = tf.maximum(dec_target_padding_mask, look_ahead_mask)
+def create_packed_attention_masks(batch_pos):
+    """
+    Creates an attention mask for a packed batch of sequences.
+    It masks both padded tokens (=0) and "look ahead"
+    Used in the 1st attention block in the decoder.
+    :param batch_pos: [batch, packed_seq_len]
+    :return: float32 of shape [batch, 1, packed_seq_len, packed_seq_len]. 0. = ok to attend, 1. = not ok
+    """
+    def _get_mask(pos):
+        mask = np.ones((pos.shape[0], 1, pos.shape[1], pos.shape[1]), dtype=np.float32)
+        for batch_idx in range(pos.shape[0]):
+            boundaries = np.where(np.pad(pos[batch_idx, :], pad_width=(0, 1))[1:] < pos[batch_idx, :])[0] + 1
+            seq_start_idx = 0
+            for seq_end_idx in boundaries:
+                mask[batch_idx, 0, seq_start_idx:seq_end_idx, seq_start_idx:seq_end_idx] = \
+                    np.triu(np.ones(seq_end_idx - seq_start_idx), 1)
+                seq_start_idx = seq_end_idx
+        return mask
 
-    return combined_mask
+    return tf.numpy_function(_get_mask, inp=[batch_pos], Tout=tf.float32)
 
 
 def scaled_dot_product_attention(q, k, v, mask):
@@ -277,11 +282,11 @@ class Decoder(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(rate)
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6, center=False, scale=False)
 
-    def call(self, x, enc_output, training, look_ahead_mask, padding_mask):
-        seq_len = tf.shape(x)[1]
+    def call(self, input, input_pos, enc_output, training, look_ahead_mask, padding_mask):
+        seq_len = tf.shape(input)[1]
         attention_weights = {}
 
-        x = self.embedding(x)  # (batch_size, target_seq_len, d_model)
+        x = self.embedding(input)  # (batch_size, target_seq_len, d_model)
         # tf.summary.scalar("embedding_variance", tf.math.reduce_variance(x))
         # tf.summary.histogram("embeddings", x)
 
@@ -289,7 +294,9 @@ class Decoder(tf.keras.layers.Layer):
         x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
         # tf.summary.scalar("scaled_embedding_variance", tf.math.reduce_variance(x))
 
-        x += self.pos_encoding[:, :seq_len, :]
+        # Add positional encoding
+        x += tf.gather(self.pos_encoding, input_pos)
+
         x = self.dropout(x, training=training)
 
         for i in range(self.num_layers):
@@ -343,14 +350,18 @@ class TransformerOnlyDecoder(tf.keras.Model):
             dff=hp.get("dff"),
             target_vocab_size=target_vocab_size,
             rate=hp.get("dropout_rate"))
-        # self.logits_bias = self.add_weight(name="logits_bias",
-        #                                    shape=(target_vocab_size,),
-        #                                    initializer='zeros',
-        #                                   trainable=True)
 
-    def call(self, tar, training, look_ahead_mask):
+    def call(self, input, input_pos, training, attention_mask):
+        """
+        Predicts next token logits for each token in each packed sequence in input
+        :param input: int32 tensor of shape [batch, packed_seq_len]
+        :param input_pos: int32 tensor of shape [batch, packed_seq_len] with positions for each token
+        :param training: bool
+        :param attention_mask: attention span for each token in input. [batch, 1, packed_seq_len, packed_seq_len]
+        :return: [batch, packed_seq_len, vocab_size] logits, attention weights
+        """
         # dec_output.shape == (batch_size, tar_seq_len, d_model)
-        dec_output, attention_weights = self.decoder(tar, None, training, look_ahead_mask, None)
+        dec_output, attention_weights = self.decoder(input, input_pos, None, training, attention_mask, None)
 
         # Final projection to vocabulary => logits, logits should have variance ~1.0 at start
         final_output = tf.matmul(dec_output, self.decoder.embedding.embeddings, transpose_b=True)

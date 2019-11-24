@@ -99,8 +99,6 @@ def preprocess(input_file: Path, output: Path, vocab_file: Path, target_vocab_si
             if len(encoded_examples) >= max_examples:
                 break
     logging.info("Finished with {} examples".format(len(encoded_examples)))
-    encoded_examples.sort(key=lambda x: -len(x["encoded"]))
-    logging.info("Sorted examples")
 
     logging.info("Writing output file '{}'".format(str(output)))
     with open(str(output), "w") as f:
