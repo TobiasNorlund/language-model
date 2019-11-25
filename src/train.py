@@ -80,10 +80,10 @@ def train_loop(ds, transformer_decoder, global_step, num_examples_processed, ckp
                 num_examples_processed.assign_add(tf.reduce_sum(tf.reduce_max(batch_seg, axis=1)))
 
                 # Summarize individual vars and gradients
-                # if should_summarize:
-                #    for i in range(len(vars)):
-                #        tf.summary.scalar("variable/" + vars[i].name, tf.linalg.norm(vars[i]))
-                #        tf.summary.scalar("gradient/" + vars[i].name, tf.linalg.norm(gradients[i]))
+                if should_summarize:
+                    for i in range(len(vars)):
+                        tf.summary.scalar("variable/" + vars[i].name, tf.linalg.norm(vars[i]))
+                        tf.summary.scalar("gradient/" + vars[i].name, tf.linalg.norm(gradients[i]))
 
             gradient_norm = tf.linalg.global_norm(gradients)[tf.newaxis]
 

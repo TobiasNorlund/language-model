@@ -9,7 +9,7 @@ hp.add("num_heads", 4, help="Num self attention heads")
 hp.add("dff", 512, help="dff")
 
 # TEMP
-INITIALIZATION_SCALE = 1.0 / tf.math.sqrt(20.0)
+INITIALIZATION_SCALE = 1.0  # / tf.math.sqrt(20.0)
 
 
 def get_angles(pos, i, d_model):
@@ -205,7 +205,7 @@ class DecoderLayer(tf.keras.layers.Layer):
 
     def call(self, x, enc_output, training, look_ahead_mask, padding_mask):
         # enc_output.shape == (batch_size, input_seq_len, d_model)
-        # tf.summary.scalar("input_variance", tf.math.reduce_variance(x))
+        tf.summary.scalar("input_variance", tf.math.reduce_variance(x))
 
         x = self.layernorm1(x)
         attn1, attn_weights_block1 = self.mha1(x, x, x, look_ahead_mask)  # (batch_size, target_seq_len, d_model)
@@ -365,8 +365,6 @@ class TransformerOnlyDecoder(tf.keras.Model):
 
         # Final projection to vocabulary => logits, logits should have variance ~1.0 at start
         final_output = tf.matmul(dec_output, self.decoder.embedding.embeddings, transpose_b=True)
-        # final_output += self.logits_bias
         # tf.summary.histogram("logits", final_output)
-        # tf.summary.histogram("logits_bias_weights", self.logits_bias.value())
 
         return final_output, attention_weights
